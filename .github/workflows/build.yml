@@ -1,7 +1,8 @@
-name: Build indikat Bass
+name: Build INDIKAT Bass
 
 on:
   push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -31,7 +32,7 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" == "macOS" ]; then
-            cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+            cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
           else
             cmake -B build -DCMAKE_BUILD_TYPE=Release
           fi
@@ -39,10 +40,54 @@ jobs:
       - name: Bauen
         run: cmake --build build --config Release --parallel 4
 
+      # Auf dem jeweiligen System packen, damit Mac-Bundles (Symlinks, Rechte) intakt bleiben
+      - name: Packen
+        shell: bash
+        run: |
+          mkdir -p dist/INDIKAT-Bass
+          cp -R build/IndikatBassSynth_artefacts/Release/VST3/*.vst3 dist/INDIKAT-Bass/
+          cp -R build/IndikatBassFX_artefacts/Release/VST3/*.vst3 dist/INDIKAT-Bass/
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cp -R build/IndikatBassSynth_artefacts/Release/AU/*.component dist/INDIKAT-Bass/
+            cp -R build/IndikatBassFX_artefacts/Release/AU/*.component dist/INDIKAT-Bass/
+            (cd dist && ditto -c -k --keepParent INDIKAT-Bass "INDIKAT-Bass-${{ matrix.name }}.zip")
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            (cd dist && 7z a -tzip "INDIKAT-Bass-${{ matrix.name }}.zip" INDIKAT-Bass > /dev/null)
+          else
+            (cd dist && zip -qry "INDIKAT-Bass-${{ matrix.name }}.zip" INDIKAT-Bass)
+          fi
+
       - name: Hochladen
         uses: actions/upload-artifact@v5
         with:
-          name: indikat-Bass-${{ matrix.name }}
-          path: |
-            build/*_artefacts/Release/VST3
-            build/*_artefacts/Release/AU
+          name: INDIKAT-Bass-${{ matrix.name }}
+          path: dist/INDIKAT-Bass-${{ matrix.name }}.zip
+
+  # Download-Seite: jedes Build-Ergebnis wird als Release veröffentlicht (auch wenn ein System fehlt)
+  release:
+    needs: build
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: INDIKAT Bass – Build ${{ github.run_number }}
+          make_latest: true
+          fail_on_unmatched_files: false
+          body: |
+            Automatischer Build von `${{ github.sha }}`.
+
+            **Windows:** ZIP entpacken, beide `.vst3` nach `C:\Program Files\Common Files\VST3\` kopieren.
+            **macOS:** ZIP entpacken, `.vst3` nach `~/Library/Audio/Plug-Ins/VST3/`, `.component` nach `~/Library/Audio/Plug-Ins/Components/`.
+            Danach im Terminal einmal: `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/INDIKAT* ~/Library/Audio/Plug-Ins/Components/INDIKAT*`
+            **Linux:** `.vst3` nach `~/.vst3/`.
+          files: dist/*.zip
