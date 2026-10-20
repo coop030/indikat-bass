@@ -49,5 +49,5 @@ automatisch Windows-, macOS- und Linux-Versionen, die du als Artefakt herunterla
 ## Tipps für Minimal Dub
 - **Mono <** auf 100–150 Hz: Sub bleibt mono und phasenstabil.
 - Env Filter: Cutoff 400–900 Hz, Reso 30–50 %, Env Amt 40–60 %, Release 150–250 ms → der typische „atmende“ Bass.
-- Delay auf 1/8 D oder 3/16-Feeling mit Low Cut 250–400 Hz – Echos ohne Matsch im Low End.
+- Delay auf 1/8 D (= 3/16) mit Low Cut 250–400 Hz – Echos ohne Matsch im Low End.
 - Pump leicht (20–30 %) auch wenn schon ein Sidechain-Kompressor läuft: gibt Groove.
