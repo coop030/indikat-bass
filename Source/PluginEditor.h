@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "BlackHole.h"
 
 // Eingebettete Schriften (OFL)
 struct IndikatFonts
@@ -42,17 +43,6 @@ private:
     juce::SharedResourcePointer<IndikatFonts> fonts;
 };
 
-// Kreisförmige Wellenform-Darstellung („Orbit“)
-class Orbit : public juce::Component
-{
-public:
-    explicit Orbit (DubBassProcessor& p) : proc (p) {}
-    void paint (juce::Graphics&) override;
-
-private:
-    DubBassProcessor& proc;
-};
-
 // Minimalistische Tastatur
 class SpaceKeyboard : public juce::MidiKeyboardComponent
 {
@@ -76,7 +66,7 @@ public:
     void resized() override;
 
     static int baseWidth()  { return 1120; }
-    static int baseHeight() { return DubBassProcessor::isSynth ? 790 : 530; }
+    static int baseHeight() { return DubBassProcessor::isSynth ? 846 : 586; }
 
 private:
     struct Knob
@@ -119,7 +109,7 @@ private:
     juce::ToggleButton pingPong { "PING PONG" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> pingPongAtt;
 
-    Orbit orbit;
+    BlackHole blackHole;
     std::unique_ptr<SpaceKeyboard> keyboard;
 
     juce::Image background;

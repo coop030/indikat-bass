@@ -1,14 +1,14 @@
-# indikat Bass Synth / indikat Bass FX
+# INDIKAT Bass Synth / INDIKAT Bass FX
 
 Zwei VST3/AU-Plugins (JUCE 8) für Basslines im Minimal-Dub- und Dub-Techno-Stil, aus einer Codebasis:
 
 | Plugin | Typ | Wofür |
 |---|---|---|
-| **indikat Bass Synth** | Instrument (MIDI) | Monophoner Bass-Synth mit 2 Oszillatoren + Sub und kompletter Effektkette |
-| **indikat Bass FX** | Audio-Effekt | Dieselbe Effektkette für vorhandene Basslines (Samples, andere Synths) |
+| **INDIKAT Bass Synth** | Instrument (MIDI) | Monophoner Bass-Synth mit 2 Oszillatoren + Sub und kompletter Effektkette |
+| **INDIKAT Bass FX** | Audio-Effekt | Dieselbe Effektkette für vorhandene Basslines (Samples, andere Synths) |
 
-![indikat Bass Synth](docs/synth.png)
-![indikat Bass FX](docs/fx.png)
+![INDIKAT Bass Synth](docs/synth.png)
+![INDIKAT Bass FX](docs/fx.png)
 
 ## Synth
 
@@ -33,6 +33,29 @@ Zwei VST3/AU-Plugins (JUCE 8) für Basslines im Minimal-Dub- und Dub-Techno-Stil
 | **DUB DELAY** | Tempo-synchron, Ping Pong, gesättigtes und gedämpftes Feedback. Der Low Cut hält den Sub aus dem Echo |
 | **PUMP** | Sidechain-artiges Ducking synchron zur DAW (1/4, 1/8, 1/2) |
 | **OUT** | Level/Input, Dry/Wet, Output |
+
+## Singularity (Schwarzes Loch)
+
+Das Fenster im Header zeigt ein Schwarzes Loch, das in Echtzeit berechnet wird (Gravitationslinse,
+Akkretionsscheibe, Photonenring). Es folgt den Parametern und dem Audiosignal
+([Video](docs/blackhole.mp4)):
+
+| Parameter | Wirkung |
+|---|---|
+| Sub Boost, Level/Input, Low Cut | Masse (Größe des Horizonts), federt nach |
+| Ausgangspegel, Pump | Pulsieren und Atmen im Takt |
+| Cutoff | Temperatur: tiefes Blau → Eis-Cyan → Weißglut |
+| Resonanz | Schärfe und Helligkeit des Photonenrings |
+| Drive | Crunch: Farbversatz, Körnung, Bitcrush-Stufen |
+| Delay Feedback/Mix | Echo-Ringe um den Horizont |
+| Mono | Neigung der Scheibe |
+| Dry/Wet | Dichte der Scheibe |
+| Synth: Wellenform, Drift, OSC 2 | Textur der Scheibe, Wackeln, Doppel-Photonenring |
+
+**Jede Parameteränderung**, auch durch Automation, löst einen Effekt aus: Partikel spiralen ins Loch,
+Schockwellen laufen nach außen, und Name und Wert werden kurz eingeblendet. Je nach Gruppe sieht der Effekt
+anders aus: Drive glitcht, Delay erzeugt Echo-Wellen, Low End lässt das Loch schlucken, Filter flackert auf.
+Bei einem Preset-Wechsel kollabiert das Loch kurz und zeigt den Preset-Namen.
 
 ## Presets
 
@@ -60,8 +83,8 @@ cmake --build build --config Release
 ```
 
 Ergebnis:
-- `build/IndikatBassSynth_artefacts/Release/VST3/indikat Bass Synth.vst3`
-- `build/IndikatBassFX_artefacts/Release/VST3/indikat Bass FX.vst3`
+- `build/IndikatBassSynth_artefacts/Release/VST3/INDIKAT Bass Synth.vst3`
+- `build/IndikatBassFX_artefacts/Release/VST3/INDIKAT Bass FX.vst3`
 
 Installieren: Windows `C:\Program Files\Common Files\VST3\`, macOS `~/Library/Audio/Plug-Ins/VST3/`
 (AU: `~/Library/Audio/Plug-Ins/Components/`), Linux `~/.vst3/`. Danach in der DAW neu scannen.

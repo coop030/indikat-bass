@@ -228,51 +228,6 @@ juce::Font IndikatLookAndFeel::getPopupMenuFont() { return fonts->mono (14.0f); 
 juce::Font IndikatLookAndFeel::getLabelFont (juce::Label& l) { return l.getFont(); }
 
 //==============================================================================
-void Orbit::paint (juce::Graphics& g)
-{
-    const auto b = getLocalBounds().toFloat();
-    const auto c = b.getCentre();
-    const float R = juce::jmin (b.getWidth(), b.getHeight()) * 0.30f;
-
-    // Umlaufbahnen
-    for (int i = 0; i < 3; ++i)
-    {
-        const float k = i == 0 ? 0.55f : (i == 1 ? 1.0f : 1.55f);
-        g.setColour (i == 1 ? Palette::hairHi : Palette::hair);
-        g.drawEllipse (juce::Rectangle<float> (R * 2.0f * k, R * 2.0f * k).withCentre (c), 1.0f);
-    }
-    g.setColour (Palette::hair);
-    g.drawLine (c.x - R * 1.85f, c.y, c.x - R * 1.62f, c.y, 1.0f);
-    g.drawLine (c.x + R * 1.62f, c.y, c.x + R * 1.85f, c.y, 1.0f);
-
-    // Wellenform auf den Kreis gelegt, stabilisiert am Nulldurchgang
-    constexpr int N = 512;
-    const int size = DubBassProcessor::scopeSize;
-    const int write = proc.scopeWritePos.load();
-    int start = (write - N - 1024 + size) & (size - 1);
-    for (int i = 0; i < 1024; ++i)
-    {
-        const int a = (start + i) & (size - 1), next = (a + 1) & (size - 1);
-        if (proc.scopeBuffer[a] <= 0.0f && proc.scopeBuffer[next] > 0.0f) { start = next; break; }
-    }
-
-    juce::Path wave;
-    for (int i = 0; i < N; ++i)
-    {
-        const float s = juce::jlimit (-1.0f, 1.0f, proc.scopeBuffer[(start + i) & (size - 1)]);
-        const float a = (float) i / (float) N * juce::MathConstants<float>::twoPi;
-        const auto p = c.getPointOnCircumference (R * (1.0f + 0.55f * s), a);
-        if (i == 0) wave.startNewSubPath (p); else wave.lineTo (p);
-    }
-    wave.closeSubPath();
-    strokeGlow (g, wave, Palette::accent.withAlpha (0.9f), 1.2f);
-
-    // Kreisender Satellit
-    const double t = juce::Time::getMillisecondCounterHiRes() * 0.0004;
-    glowDot (g, c.getPointOnCircumference (R * 1.55f, (float) std::fmod (t, juce::MathConstants<double>::twoPi)),
-             1.6f, Palette::text);
-}
-
 //==============================================================================
 void SpaceKeyboard::drawWhiteNote (int note, juce::Graphics& g, juce::Rectangle<float> area, bool isDown, bool isOver,
                                    juce::Colour, juce::Colour)
@@ -318,7 +273,7 @@ void SpaceKeyboard::drawBlackNote (int, juce::Graphics& g, juce::Rectangle<float
 
 //==============================================================================
 IndikatPanel::IndikatPanel (DubBassProcessor& p)
-    : proc (p), orbit (p)
+    : proc (p), blackHole (p)
 {
     setLookAndFeel (&lnf);
     setOpaque (true);
@@ -393,7 +348,7 @@ IndikatPanel::IndikatPanel (DubBassProcessor& p)
     addAndMakeVisible (prevPreset);
     addAndMakeVisible (nextPreset);
 
-    addAndMakeVisible (orbit);
+    addAndMakeVisible (blackHole);
 
     if (DubBassProcessor::isSynth)
     {
@@ -524,14 +479,14 @@ void IndikatPanel::paint (juce::Graphics& g)
 
     // Logo (Vektor, 4.93 : 1)
     if (logo != nullptr)
-        logo->drawWithin (g, { 30.0f, 31.0f, 22.0f * 4.93f, 22.0f }, juce::RectanglePlacement::xLeft, 1.0f);
-    glowDot (g, { 33.0f, 70.0f }, 2.2f, Palette::accent);
+        logo->drawWithin (g, { 30.0f, 52.0f, 24.0f * 4.93f, 24.0f }, juce::RectanglePlacement::xLeft, 1.0f);
+    glowDot (g, { 33.0f, 96.0f }, 2.2f, Palette::accent);
     g.setColour (Palette::dim);
     g.setFont (fonts->mono (11.5f).withExtraKerningFactor (0.45f));
-    g.drawText (DubBassProcessor::isSynth ? "BASS SYNTH" : "BASS FX", 44, 62, 200, 16, juce::Justification::centredLeft);
+    g.drawText (DubBassProcessor::isSynth ? "BASS SYNTH" : "BASS FX", 44, 88, 200, 16, juce::Justification::centredLeft);
     g.setColour (Palette::faint);
     g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.2f));
-    g.drawText ("LF UNIT // 1.1", 196, 62, 140, 16, juce::Justification::centredLeft);
+    g.drawText ("LF UNIT // 1.2", 31, 108, 140, 16, juce::Justification::centredLeft);
 
     // Preset-Nummer
     g.setColour (Palette::dim);
@@ -546,7 +501,7 @@ void IndikatPanel::paint (juce::Graphics& g)
     line.addColour (0.15, Palette::hairHi);
     line.addColour (0.85, Palette::hairHi);
     g.setGradientFill (line);
-    g.fillRect (28, 100, getWidth() - 56, 1);
+    g.fillRect (28, 158, getWidth() - 56, 1);
 
     // Meter
     auto m = meterArea;
@@ -639,19 +594,19 @@ void IndikatPanel::resized()
     auto area = getLocalBounds().reduced (28, 0);
 
     // Header
-    auto header = juce::Rectangle<int> (area.getX(), 18, area.getWidth(), 74);
-    auto presetArea = header.removeFromRight (290).withTrimmedTop (34).withHeight (28);
+    auto header = juce::Rectangle<int> (area.getX(), 20, area.getWidth(), 126);
+    auto presetArea = header.removeFromRight (270).withTrimmedTop (62).withHeight (28);
     nextPreset.setBounds (presetArea.removeFromRight (28));
     prevPreset.setBounds (presetArea.removeFromLeft (28));
     presetBox.setBounds (presetArea.reduced (8, 0));
 
-    header.removeFromRight (40);
-    orbit.setBounds (header.removeFromRight (110).expanded (0, 8));
-    header.removeFromRight (30);
-    meterArea = header.removeFromRight (240).reduced (0, 10);
+    header.removeFromRight (34);
+    blackHole.setBounds (header.removeFromRight (316));
+    header.removeFromRight (34);
+    meterArea = header.removeFromRight (220).reduced (0, 36);
 
     // Sektionen
-    area.setTop (114);
+    area.setTop (172);
     area.removeFromBottom (24);
     if (keyboard != nullptr)
     {
@@ -693,7 +648,6 @@ void IndikatPanel::timerCallback()
     repaint (meterArea.expanded (4));
     if (! pumpDot.isEmpty())
         repaint (pumpDot.expanded (12));
-    orbit.repaint();
 
     if (presetBox.getSelectedId() != proc.getCurrentProgram() + 1)
     {

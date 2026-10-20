@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(IndikatBass VERSION 1.1.0)
+project(IndikatBass VERSION 1.2.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,16 +26,17 @@ juce_add_binary_data(IndikatFonts SOURCES
 set(DUBBASS_SOURCES
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/BassSynth.cpp)
+    Source/BassSynth.cpp
+    Source/BlackHole.cpp)
 
 # Effekt für vorhandene Basslines
 juce_add_plugin(IndikatBassFX
-    COMPANY_NAME "indikat"
+    COMPANY_NAME "INDIKAT"
     BUNDLE_ID com.indikat.bassfx
     PLUGIN_MANUFACTURER_CODE Indk
     PLUGIN_CODE Ibfx
     FORMATS VST3 AU Standalone
-    PRODUCT_NAME "indikat Bass FX"
+    PRODUCT_NAME "INDIKAT Bass FX"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
@@ -46,12 +47,12 @@ juce_add_plugin(IndikatBassFX
 
 # Bass-Synth mit 2 Oszillatoren + derselben Effektkette
 juce_add_plugin(IndikatBassSynth
-    COMPANY_NAME "indikat"
+    COMPANY_NAME "INDIKAT"
     BUNDLE_ID com.indikat.basssynth
     PLUGIN_MANUFACTURER_CODE Indk
     PLUGIN_CODE Ibsy
     FORMATS VST3 AU Standalone
-    PRODUCT_NAME "indikat Bass Synth"
+    PRODUCT_NAME "INDIKAT Bass Synth"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
@@ -89,7 +90,7 @@ if(INDIKAT_TESTS)
     juce_add_console_app(IndikatRenderTest PRODUCT_NAME "IndikatRenderTest")
     target_sources(IndikatRenderTest PRIVATE Tests/RenderTest.cpp ${DUBBASS_SOURCES})
     target_compile_definitions(IndikatRenderTest PRIVATE
-        DUBBASS_SYNTH=1 JucePlugin_Name="indikat Bass Synth" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+        DUBBASS_SYNTH=1 JucePlugin_Name="INDIKAT Bass Synth" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
     target_link_libraries(IndikatRenderTest PRIVATE juce::juce_audio_utils juce::juce_dsp IndikatFonts
         juce::juce_recommended_config_flags)
 endif()
