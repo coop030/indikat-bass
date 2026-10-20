@@ -96,6 +96,6 @@ jobs:
             **Windows:** ZIP entpacken, beide `.vst3` nach `C:\Program Files\Common Files\VST3\` kopieren.
             **macOS:** ZIP entpacken (Doppelklick), dann Terminal öffnen und eingeben:
             `bash ~/Downloads/INDIKAT-Bass/INDIKAT\ installieren.command`
-            Das Skript kopiert VST3 + AU an die richtige Stelle, hebt die Quarantäne auf und signiert die Plugins lokal.
+            Das Skript fragt nach dem Mac-Passwort, kopiert VST3 + AU nach Macintosh HD › Library › Audio › Plug-Ins, hebt die Quarantäne auf und signiert die Plugins lokal.
             **Linux:** `.vst3` nach `~/.vst3/`.
           files: dist/*.zip
