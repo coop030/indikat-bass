@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(DubBass VERSION 1.0.0)
+project(IndikatBass VERSION 1.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,13 +17,24 @@ else()
     FetchContent_MakeAvailable(JUCE)
 endif()
 
-juce_add_plugin(DubBass
-    COMPANY_NAME "DubBass Audio"
-    BUNDLE_ID com.dubbassaudio.dubbass
-    PLUGIN_MANUFACTURER_CODE Dbba
-    PLUGIN_CODE Dbs1
+juce_add_binary_data(IndikatFonts SOURCES
+    Resources/Michroma-Regular.ttf
+    Resources/Questrial-Regular.ttf
+    Resources/ShareTechMono-Regular.ttf)
+
+set(DUBBASS_SOURCES
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+    Source/BassSynth.cpp)
+
+# Effekt für vorhandene Basslines
+juce_add_plugin(IndikatBassFX
+    COMPANY_NAME "indikat"
+    BUNDLE_ID com.indikat.bassfx
+    PLUGIN_MANUFACTURER_CODE Indk
+    PLUGIN_CODE Ibfx
     FORMATS VST3 AU Standalone
-    PRODUCT_NAME "DubBass"
+    PRODUCT_NAME "indikat Bass FX"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
@@ -32,21 +43,52 @@ juce_add_plugin(DubBass
     COPY_PLUGIN_AFTER_BUILD FALSE
     VST3_CATEGORIES Fx Filter Delay)
 
-target_sources(DubBass PRIVATE
-    Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp)
+# Bass-Synth mit 2 Oszillatoren + derselben Effektkette
+juce_add_plugin(IndikatBassSynth
+    COMPANY_NAME "indikat"
+    BUNDLE_ID com.indikat.basssynth
+    PLUGIN_MANUFACTURER_CODE Indk
+    PLUGIN_CODE Ibsy
+    FORMATS VST3 AU Standalone
+    PRODUCT_NAME "indikat Bass Synth"
+    IS_SYNTH TRUE
+    NEEDS_MIDI_INPUT TRUE
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    EDITOR_WANTS_KEYBOARD_FOCUS FALSE
+    COPY_PLUGIN_AFTER_BUILD FALSE
+    AU_MAIN_TYPE kAudioUnitType_MusicDevice
+    VST3_CATEGORIES Instrument Synth)
 
-target_compile_definitions(DubBass PUBLIC
-    JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0
-    JUCE_DISPLAY_SPLASH_SCREEN=0)
+foreach(target IndikatBassFX IndikatBassSynth)
+    target_sources(${target} PRIVATE ${DUBBASS_SOURCES})
 
-target_link_libraries(DubBass
-    PRIVATE
-        juce::juce_audio_utils
-        juce::juce_dsp
-    PUBLIC
-        juce::juce_recommended_config_flags
-        juce::juce_recommended_lto_flags
-        juce::juce_recommended_warning_flags)
+    target_compile_definitions(${target} PUBLIC
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_VST3_CAN_REPLACE_VST2=0
+        JUCE_DISPLAY_SPLASH_SCREEN=0)
+
+    target_link_libraries(${target}
+        PRIVATE
+            juce::juce_audio_utils
+            juce::juce_dsp
+            IndikatFonts
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_lto_flags
+            juce::juce_recommended_warning_flags)
+endforeach()
+
+target_compile_definitions(IndikatBassSynth PRIVATE DUBBASS_SYNTH=1)
+
+# Offline-Test: rendert alle Synth-Presets mit einer Bassline als WAV (cmake -DINDIKAT_TESTS=ON)
+option(INDIKAT_TESTS "Build offline render test" OFF)
+if(INDIKAT_TESTS)
+    juce_add_console_app(IndikatRenderTest PRODUCT_NAME "IndikatRenderTest")
+    target_sources(IndikatRenderTest PRIVATE Tests/RenderTest.cpp ${DUBBASS_SOURCES})
+    target_compile_definitions(IndikatRenderTest PRIVATE
+        DUBBASS_SYNTH=1 JucePlugin_Name="indikat Bass Synth" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(IndikatRenderTest PRIVATE juce::juce_audio_utils juce::juce_dsp IndikatFonts
+        juce::juce_recommended_config_flags)
+endif()

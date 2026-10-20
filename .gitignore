@@ -1,3 +1,5 @@
 build/
 JUCE/
+demos/
+*.zip
 .DS_Store

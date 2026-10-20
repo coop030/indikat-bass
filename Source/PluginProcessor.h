@@ -2,8 +2,13 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_dsp/juce_dsp.h>
+#include "BassSynth.h"
 
-// Signalfluss:
+#ifndef DUBBASS_SYNTH
+ #define DUBBASS_SYNTH 0
+#endif
+
+// Signalfluss (im Synth ersetzt der Bass-Synth den Input und seine Filter-Hüllkurve den Envelope Follower):
 // Input -> Low Cut -> Mono Bass (unterhalb Crossover) -> Sub Shelf -> Drive
 //       -> Envelope Filter -> Dub Delay (Send, mit Low Cut) -> Pump -> Mix -> Output
 class DubBassProcessor : public juce::AudioProcessor
@@ -21,7 +26,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return DUBBASS_SYNTH != 0; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 4.0; }
@@ -36,6 +41,7 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+    static constexpr bool isSynth = DUBBASS_SYNTH != 0;
 
     juce::AudioProcessorValueTreeState apvts;
 
@@ -43,6 +49,14 @@ public:
     std::atomic<float> envDisplay { 0.0f };
     std::atomic<float> pumpDisplay { 1.0f };
     std::atomic<float> outLevel { 0.0f };
+
+    // Oszilloskop: Ringpuffer des Ausgangs (Mono), wird von der GUI gelesen
+    static constexpr int scopeSize = 4096;
+    float scopeBuffer[scopeSize] {};
+    std::atomic<int> scopeWritePos { 0 };
+
+    // Bildschirm-Tastatur (Synth)
+    juce::MidiKeyboardState keyboardState;
 
 private:
     void updateFilters();
@@ -64,6 +78,10 @@ private:
 
     // Envelope Follower
     float envelope = 0.0f;
+
+    // Synth
+    BassSynth synth;
+    std::vector<float> synthMod;
 
     // Delay
     juce::AudioBuffer<float> delayBuffer;
