@@ -1,0 +1,95 @@
+name: Build INDIKAT Pluto
+
+on:
+  push:
+    branches: [pluto]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: macos-15-intel
+            name: macOS
+          - os: ubuntu-24.04
+            name: Linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Linux-Abhängigkeiten
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxext-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev
+
+      - name: Konfigurieren
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          else
+            cmake -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+
+      - name: Bauen
+        run: cmake --build build --config Release --parallel 4
+
+      # Auf dem jeweiligen System packen, damit Mac-Bundles (Symlinks, Rechte) intakt bleiben
+      - name: Packen
+        shell: bash
+        run: |
+          mkdir -p dist/INDIKAT-Pluto
+          cp -R build/IndikatPluto_artefacts/Release/VST3/*.vst3 dist/INDIKAT-Pluto/
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cp -R build/IndikatPluto_artefacts/Release/AU/*.component dist/INDIKAT-Pluto/
+            cp -R build/IndikatPluto_artefacts/Release/Standalone/*.app dist/INDIKAT-Pluto/
+            for p in dist/INDIKAT-Pluto/*; do codesign --force --deep --sign - "$p"; done
+            (cd dist && ditto -c -k --keepParent INDIKAT-Pluto "INDIKAT-Pluto-${{ matrix.name }}.zip")
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            cp build/IndikatPluto_artefacts/Release/Standalone/*.exe dist/INDIKAT-Pluto/
+            (cd dist && 7z a -tzip "INDIKAT-Pluto-${{ matrix.name }}.zip" INDIKAT-Pluto > /dev/null)
+          else
+            (cd dist && zip -qry "INDIKAT-Pluto-${{ matrix.name }}.zip" INDIKAT-Pluto)
+          fi
+
+      - name: Hochladen
+        uses: actions/upload-artifact@v5
+        with:
+          name: INDIKAT-Pluto-${{ matrix.name }}
+          path: dist/INDIKAT-Pluto-${{ matrix.name }}.zip
+
+  # Download-Seite: jedes Build-Ergebnis wird als Release veröffentlicht (auch wenn ein System fehlt)
+  release:
+    needs: build
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pluto-build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: INDIKAT Pluto – Build ${{ github.run_number }}
+          make_latest: false
+          fail_on_unmatched_files: false
+          body: |
+            Automatischer Build von `${{ github.sha }}`.
+
+            **Windows:** ZIP entpacken, `INDIKAT Pluto.vst3` nach `C:\Program Files\Common Files\VST3\` kopieren. `INDIKAT Pluto.exe` ist die Standalone-Version.
+            **macOS:** ZIP entpacken, `.vst3` nach `~/Library/Audio/Plug-Ins/VST3/`, `.component` nach `~/Library/Audio/Plug-Ins/Components/`.
+            Danach im Terminal einmal: `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/INDIKAT* ~/Library/Audio/Plug-Ins/Components/INDIKAT*`
+            **Linux:** `.vst3` nach `~/.vst3/`.
+          files: dist/*.zip
