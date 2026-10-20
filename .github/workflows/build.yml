@@ -1,0 +1,48 @@
+name: Build DubBass
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: macos-latest
+            name: macOS
+          - os: ubuntu-latest
+            name: Linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux-Abhängigkeiten
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxext-dev libfreetype-dev libfontconfig1-dev libgl1-mesa-dev ninja-build
+
+      - name: Konfigurieren
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "macOS" ]; then
+            cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          else
+            cmake -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+
+      - name: Bauen
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: DubBass-${{ matrix.name }}
+          path: |
+            build/DubBass_artefacts/Release/VST3
+            build/DubBass_artefacts/Release/AU
