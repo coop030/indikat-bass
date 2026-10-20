@@ -7,8 +7,9 @@ namespace
     const juce::StringArray delayDivNames { "1/16", "1/16 D", "1/8", "1/8 D", "1/4", "1/4 D", "1/2" };
     const float delayDivBeats[] { 0.25f, 0.375f, 0.5f, 0.75f, 1.0f, 1.5f, 2.0f };
 
-    const juce::StringArray pumpRateNames { "1/4", "1/8", "1/2" };
-    const double pumpRateBeats[] { 1.0, 0.5, 2.0 };
+    // Filter-LFO: Perioden in Beats
+    const juce::StringArray lfoRateNames { "1/4", "1/2", "1 BAR", "2 BARS", "4 BARS" };
+    const double lfoRateBeats[] { 1.0, 2.0, 4.0, 8.0, 16.0 };
 
     juce::NormalisableRange<float> freqRange (float lo, float hi, float centre)
     {
@@ -28,23 +29,22 @@ namespace
         { "Deep Chord Dub", { { "lowCut", 30.0f }, { "monoFreq", 120.0f }, { "subGain", 3.0f },
                               { "drive", 4.0f }, { "driveMix", 0.4f }, { "filterType", 0.0f },
                               { "cutoff", 650.0f }, { "reso", 0.45f }, { "envAmt", 0.45f },
-                              { "envRelease", 220.0f }, { "delayDiv", 3.0f }, { "feedback", 0.62f },
+                              { "envRelease", 220.0f }, { "lfoRate", 3 }, { "lfoDepth", 0.25f },
+                              { "delayDiv", 3.0f }, { "feedback", 0.62f },
                               { "delayLowCut", 280.0f }, { "delayTone", 2200.0f }, { "delayMix", 0.35f },
-                              { "pingPong", 1.0f }, { "pumpDepth", 0.25f } } },
+                              { "pingPong", 1.0f }, { "revSize", 0.7f }, { "revTone", 0.35f }, { "revMix", 0.3f } } },
         { "Rolling Sub", { { "lowCut", 28.0f }, { "monoFreq", 150.0f }, { "subFreq", 50.0f }, { "subGain", 6.0f },
                            { "drive", 8.0f }, { "driveTone", 1800.0f }, { "driveMix", 0.55f },
                            { "cutoff", 420.0f }, { "reso", 0.3f }, { "envAmt", 0.65f }, { "envAttack", 2.0f },
-                           { "envRelease", 120.0f }, { "delayMix", 0.0f }, { "pumpDepth", 0.45f },
-                           { "pumpRelease", 0.55f } } },
-        { "Warehouse Pump", { { "lowCut", 35.0f }, { "subGain", 4.0f }, { "drive", 12.0f }, { "driveMix", 0.7f },
+                           { "envRelease", 120.0f }, { "delayMix", 0.0f } } },
+        { "Warehouse Room", { { "lowCut", 35.0f }, { "subGain", 4.0f }, { "drive", 12.0f }, { "driveMix", 0.7f },
                               { "filterType", 0.0f }, { "cutoff", 900.0f }, { "reso", 0.55f }, { "envAmt", 0.3f },
                               { "delayDiv", 2.0f }, { "feedback", 0.4f }, { "delayLowCut", 400.0f },
-                              { "delayMix", 0.2f }, { "pumpRate", 0.0f }, { "pumpDepth", 0.75f },
-                              { "pumpRelease", 0.4f } } },
+                              { "delayMix", 0.2f }, { "revSize", 0.35f }, { "revTone", 0.5f }, { "revMix", 0.18f } } },
         { "Echo Chamber", { { "monoFreq", 100.0f }, { "cutoff", 1200.0f }, { "reso", 0.6f }, { "envAmt", -0.35f },
-                            { "filterType", 1.0f }, { "delayDiv", 5.0f }, { "feedback", 0.78f },
-                            { "delayLowCut", 350.0f }, { "delayTone", 1500.0f }, { "delayMix", 0.5f },
-                            { "pingPong", 1.0f }, { "pumpDepth", 0.15f } } },
+                            { "filterType", 1.0f }, { "lfoRate", 4 }, { "lfoDepth", 0.3f }, { "delayDiv", 5.0f },
+                            { "feedback", 0.78f }, { "delayLowCut", 350.0f }, { "delayTone", 1500.0f }, { "delayMix", 0.5f },
+                            { "pingPong", 1.0f }, { "revSize", 0.85f }, { "revTone", 0.3f }, { "revMix", 0.35f } } },
     };
 
     // Synth-Presets: nur Abweichungen von den Defaults (siehe createLayout)
@@ -53,56 +53,74 @@ namespace
         { "Deep Sub Pluck", { { "osc1Wave", 0 }, { "osc2Wave", 1 }, { "osc2Oct", 1 }, { "osc2Level", 0.3f }, { "subLevel", 0.3f },
                               { "ampDecay", 250 }, { "ampSustain", 0.0f }, { "ampRelease", 120 },
                               { "cutoff", 300 }, { "reso", 0.25f }, { "envAmt", 0.55f }, { "envRelease", 180 },
-                              { "drive", 6 }, { "driveMix", 0.4f } , { "outGain", 3.2f } } },
-        { "Dub Chord Stab", { { "osc1Wave", 2 }, { "osc2Wave", 2 }, { "osc2Semi", 7 }, { "osc2Fine", 6 }, { "osc2Level", 0.7f },
+                              { "drive", 6 }, { "driveMix", 0.4f }, { "outGain", 3.2f } } },
+        { "Dub Chord Stab", { { "osc1Wave", 2 }, { "osc2Wave", 2 }, { "osc2Fine", 7 }, { "osc2Level", 0.6f },
+                              { "chordOn", 1 }, { "chordType", 0 },
                               { "ampDecay", 400 }, { "ampSustain", 0.0f }, { "ampRelease", 250 },
                               { "cutoff", 350 }, { "reso", 0.5f }, { "envAmt", 0.6f }, { "envRelease", 260 },
+                              { "lfoRate", 3 }, { "lfoDepth", 0.3f },
                               { "delayDiv", 3 }, { "feedback", 0.62f }, { "delayLowCut", 300 }, { "delayTone", 2200 },
-                              { "delayMix", 0.35f }, { "pumpDepth", 0.3f }, { "drift", 0.25f } , { "outGain", -2.0f } } },
-        { "Minor Seventh Stab", { { "osc1Wave", 2 }, { "osc2Wave", 2 }, { "osc2Semi", 10 }, { "osc2Fine", -5 }, { "osc2Level", 0.6f },
-                                  { "subLevel", 0.2f }, { "ampDecay", 320 }, { "ampSustain", 0.0f }, { "ampRelease", 300 },
-                                  { "cutoff", 420 }, { "reso", 0.45f }, { "envAmt", 0.5f }, { "envRelease", 220 },
-                                  { "delayDiv", 3 }, { "feedback", 0.7f }, { "delayLowCut", 350 }, { "delayTone", 1800 },
-                                  { "delayMix", 0.4f }, { "pumpDepth", 0.25f }, { "drift", 0.3f } , { "outGain", -4.7f } } },
+                              { "delayMix", 0.35f }, { "revSize", 0.75f }, { "revTone", 0.35f }, { "revMix", 0.3f },
+                              { "drift", 0.25f }, { "outGain", -1.4f } } },
+        { "Minor Ninth Stab", { { "osc1Wave", 2 }, { "osc2Wave", 1 }, { "osc2Oct", 1 }, { "osc2Fine", -5 }, { "osc2Level", 0.3f },
+                                { "chordOn", 1 }, { "chordType", 1 },
+                                { "subLevel", 0.15f }, { "ampDecay", 320 }, { "ampSustain", 0.0f }, { "ampRelease", 300 },
+                                { "cutoff", 420 }, { "reso", 0.45f }, { "envAmt", 0.5f }, { "envRelease", 220 },
+                                { "delayDiv", 3 }, { "feedback", 0.7f }, { "delayLowCut", 350 }, { "delayTone", 1800 },
+                                { "delayMix", 0.4f }, { "revSize", 0.8f }, { "revTone", 0.3f }, { "revMix", 0.35f },
+                                { "drift", 0.3f }, { "outGain", 0.3f } } },
+        { "Deep Space Chord", { { "osc1Wave", 2 }, { "osc2Wave", 1 }, { "osc2Oct", 1 }, { "osc2Level", 0.4f },
+                                { "chordOn", 1 }, { "chordType", 2 },
+                                { "ampDecay", 600 }, { "ampSustain", 0.0f }, { "ampRelease", 500 },
+                                { "cutoff", 380 }, { "reso", 0.4f }, { "envAmt", 0.45f }, { "envRelease", 300 },
+                                { "lfoRate", 4 }, { "lfoDepth", 0.4f },
+                                { "delayDiv", 3 }, { "feedback", 0.65f }, { "delayMix", 0.3f },
+                                { "revSize", 0.95f }, { "revTone", 0.25f }, { "revMix", 0.45f }, { "drift", 0.3f }, { "outGain", -0.3f } } },
         { "Rubber Bass", { { "osc1Wave", 3 }, { "osc2Wave", 2 }, { "osc2Oct", -1 }, { "osc2Level", 0.5f },
                            { "ampDecay", 300 }, { "ampSustain", 0.5f }, { "ampRelease", 90 },
                            { "cutoff", 250 }, { "reso", 0.6f }, { "envAmt", 0.7f }, { "envRelease", 140 },
-                           { "glide", 60 }, { "legato", 1 }, { "drive", 8 }, { "driveMix", 0.5f } , { "outGain", -2.6f } } },
+                           { "glide", 60 }, { "legato", 1 }, { "drive", 8 }, { "driveMix", 0.5f }, { "outGain", -2.6f } } },
         { "Warm Round", { { "osc1Wave", 1 }, { "osc2Wave", 0 }, { "osc2Oct", -1 }, { "osc2Level", 0.6f },
                           { "ampSustain", 0.8f }, { "ampRelease", 150 }, { "cutoff", 1200 }, { "envAmt", 0.15f },
-                          { "drive", 3 }, { "driveMix", 0.5f } , { "outGain", -1.5f } } },
+                          { "drive", 3 }, { "driveMix", 0.5f }, { "outGain", -1.5f } } },
         { "Minimal Click Bass", { { "osc1Wave", 0 }, { "osc2Wave", 3 }, { "osc2Oct", 1 }, { "osc2Level", 0.15f },
                                   { "ampAttack", 0.5f }, { "ampDecay", 90 }, { "ampSustain", 0.0f }, { "ampRelease", 60 },
                                   { "cutoff", 2000 }, { "envAmt", 0.3f }, { "envRelease", 40 },
-                                  { "drive", 10 }, { "driveTone", 3000 }, { "driveMix", 0.3f } , { "outGain", 6.1f } } },
+                                  { "drive", 10 }, { "driveTone", 3000 }, { "driveMix", 0.3f }, { "outGain", 6.1f } } },
         { "Acid Glide", { { "osc1Wave", 2 }, { "ampSustain", 0.8f }, { "ampRelease", 60 },
                           { "cutoff", 300 }, { "reso", 0.75f }, { "envAmt", 0.7f }, { "envRelease", 200 },
-                          { "glide", 80 }, { "legato", 1 }, { "velocity", 0.8f }, { "drive", 12 }, { "driveMix", 0.6f } , { "outGain", -2.8f } } },
+                          { "glide", 80 }, { "legato", 1 }, { "velocity", 0.8f }, { "drive", 12 }, { "driveMix", 0.6f },
+                          { "outGain", -2.8f } } },
         { "Detuned Wobble", { { "osc1Wave", 2 }, { "osc2Wave", 2 }, { "osc2Fine", 12 }, { "osc2Level", 0.8f },
                               { "cutoff", 500 }, { "reso", 0.35f }, { "envAmt", 0.3f }, { "envAttack", 20 }, { "envRelease", 400 },
-                              { "drift", 0.4f }, { "delayDiv", 5 }, { "delayMix", 0.2f } , { "outGain", -1.5f } } },
+                              { "lfoRate", 1 }, { "lfoDepth", 0.25f },
+                              { "drift", 0.4f }, { "delayDiv", 5 }, { "delayMix", 0.2f }, { "outGain", -1.5f } } },
         { "Sub Only", { { "osc1Wave", 0 }, { "subLevel", 0.5f }, { "ampSustain", 1.0f }, { "ampRelease", 80 },
                         { "cutoff", 18000 }, { "envAmt", 0.0f }, { "drive", 2 }, { "driveTone", 1500 }, { "driveMix", 0.2f },
-                        { "monoFreq", 200 }, { "drift", 0.0f } , { "outGain", -2.8f } } },
-        { "Warehouse Pump Bass", { { "osc1Wave", 2 }, { "osc2Wave", 3 }, { "osc2Oct", -1 }, { "osc2Level", 0.6f },
-                                   { "cutoff", 600 }, { "reso", 0.4f }, { "envAmt", 0.45f }, { "envRelease", 200 },
-                                   { "pumpDepth", 0.7f }, { "pumpRelease", 0.45f }, { "drive", 10 }, { "driveMix", 0.6f } , { "outGain", -2.5f } } },
+                        { "monoFreq", 200 }, { "drift", 0.0f }, { "outGain", -2.8f } } },
+        { "Warehouse Bass", { { "osc1Wave", 2 }, { "osc2Wave", 3 }, { "osc2Oct", -1 }, { "osc2Level", 0.6f },
+                              { "cutoff", 600 }, { "reso", 0.4f }, { "envAmt", 0.45f }, { "envRelease", 200 },
+                              { "revSize", 0.3f }, { "revMix", 0.12f }, { "drive", 10 }, { "driveMix", 0.6f },
+                              { "outGain", -3.2f } } },
         { "Echo Dub Bass", { { "osc1Wave", 1 }, { "osc2Wave", 2 }, { "osc2Oct", 1 }, { "osc2Level", 0.35f },
                              { "ampDecay", 350 }, { "ampSustain", 0.3f }, { "cutoff", 700 }, { "envAmt", 0.4f },
                              { "delayDiv", 3 }, { "feedback", 0.7f }, { "delayLowCut", 400 }, { "delayTone", 1800 },
-                             { "delayMix", 0.45f }, { "pumpDepth", 0.2f } , { "outGain", 4.1f } } },
+                             { "delayMix", 0.45f }, { "revSize", 0.65f }, { "revMix", 0.25f }, { "outGain", 4.1f } } },
         { "Hollow Pulse", { { "osc1Wave", 4 }, { "osc2Wave", 0 }, { "osc2Oct", -1 }, { "osc2Level", 0.5f },
-                            { "cutoff", 900 }, { "reso", 0.3f }, { "envAmt", 0.3f }, { "drift", 0.2f } , { "outGain", -1.1f } } },
+                            { "cutoff", 900 }, { "reso", 0.3f }, { "envAmt", 0.3f }, { "drift", 0.2f }, { "outGain", -1.1f } } },
         { "Tape Deep", { { "osc1Wave", 2 }, { "cutoff", 220 }, { "reso", 0.2f }, { "envAmt", 0.35f }, { "envRelease", 300 },
+                         { "lfoRate", 3 }, { "lfoDepth", 0.2f },
                          { "drive", 14 }, { "driveTone", 900 }, { "driveMix", 0.7f }, { "delayDiv", 4 }, { "feedback", 0.45f },
-                         { "delayTone", 1200 }, { "delayMix", 0.2f }, { "drift", 0.5f } , { "outGain", -0.8f } } },
+                         { "delayTone", 1200 }, { "delayMix", 0.2f }, { "drift", 0.5f }, { "outGain", -0.8f } } },
         { "Fifth Pluck", { { "osc1Wave", 0 }, { "osc2Wave", 1 }, { "osc2Semi", 7 }, { "osc2Level", 0.5f },
                            { "ampDecay", 180 }, { "ampSustain", 0.0f }, { "ampRelease", 100 },
-                           { "cutoff", 1000 }, { "envAmt", 0.3f } , { "outGain", 3.4f } } },
+                           { "cutoff", 1000 }, { "envAmt", 0.3f }, { "outGain", 3.4f } } },
         { "Night Drive", { { "osc1Wave", 2 }, { "osc2Wave", 4 }, { "osc2Oct", -1 }, { "osc2Fine", -7 }, { "osc2Level", 0.5f },
                            { "subLevel", 0.25f }, { "ampDecay", 500 }, { "ampSustain", 0.4f }, { "ampRelease", 200 },
                            { "filterType", 1 }, { "cutoff", 450 }, { "reso", 0.55f }, { "envAmt", 0.5f }, { "envRelease", 250 },
-                           { "delayDiv", 3 }, { "feedback", 0.55f }, { "delayMix", 0.25f }, { "pumpDepth", 0.35f } , { "outGain", 2.3f } } },
+                           { "lfoRate", 2 }, { "lfoDepth", 0.35f },
+                           { "delayDiv", 3 }, { "feedback", 0.55f }, { "delayMix", 0.25f },
+                           { "revSize", 0.55f }, { "revMix", 0.2f }, { "outGain", 2.0f } } },
     };
 
     const Preset* const presets = DubBassProcessor::isSynth ? synthPresets : fxPresets;
@@ -152,6 +170,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout DubBassProcessor::createLayo
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "reso", 1 }, "Resonance", NormalisableRange<float> (0.0f, 1.0f), 0.2f, pct));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "envAmt", 1 }, "Env Amount", NormalisableRange<float> (-1.0f, 1.0f), isSynth ? 0.5f : 0.0f, pct));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "envAttack", 1 }, "Env Attack", freqRange (0.1f, 100.0f, 10.0f), isSynth ? 1.0f : 5.0f, ms));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "lfoRate", 1 }, "LFO Rate", lfoRateNames, 3));
+    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "lfoDepth", 1 }, "LFO Depth", NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "envRelease", 1 }, isSynth ? "Env Decay" : "Env Release", freqRange (10.0f, 1000.0f, 150.0f), isSynth ? 200.0f : 150.0f, ms));
 
     // Dub Delay
@@ -162,10 +182,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout DubBassProcessor::createLayo
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "delayMix", 1 }, "Delay Mix", NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "pingPong", 1 }, "Ping Pong", StringArray { "Off", "On" }, 1));
 
-    // Pump
-    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "pumpRate", 1 }, "Pump Rate", pumpRateNames, 0));
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "pumpDepth", 1 }, "Pump Depth", NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
-    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "pumpRelease", 1 }, "Pump Release", NormalisableRange<float> (0.05f, 1.0f), 0.5f, pct));
+    // Reverb
+    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "revSize", 1 }, "Reverb Size", NormalisableRange<float> (0.0f, 1.0f), 0.6f, pct));
+    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "revTone", 1 }, "Reverb Tone", NormalisableRange<float> (0.0f, 1.0f), 0.4f, pct));
+    p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "revMix", 1 }, "Reverb Mix", NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "revLowCut", 1 }, "Reverb Low Cut", StringArray { "Off", "On" }, 1));
 
     // Master
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "mix", 1 }, "Dry/Wet", NormalisableRange<float> (0.0f, 1.0f), 1.0f, pct));
@@ -189,8 +210,9 @@ DubBassProcessor::DubBassProcessor()
     pCutoff = get ("cutoff");       pReso = get ("reso");             pEnvAmt = get ("envAmt");
     pEnvAttack = get ("envAttack"); pEnvRelease = get ("envRelease"); pDelayDiv = get ("delayDiv");
     pFeedback = get ("feedback");   pDelayLowCut = get ("delayLowCut"); pDelayTone = get ("delayTone");
-    pDelayMix = get ("delayMix");   pPingPong = get ("pingPong");     pPumpRate = get ("pumpRate");
-    pPumpDepth = get ("pumpDepth"); pPumpRelease = get ("pumpRelease"); pMix = get ("mix");
+    pDelayMix = get ("delayMix");   pPingPong = get ("pingPong");     pMix = get ("mix");
+    pRevSize = get ("revSize");     pRevTone = get ("revTone");       pRevMix = get ("revMix");
+    pRevLowCut = get ("revLowCut"); pLfoRate = get ("lfoRate");       pLfoDepth = get ("lfoDepth");
     pOutGain = get ("outGain");
 
     if (isSynth)
@@ -235,7 +257,7 @@ void DubBassProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     envelope = 0.0f;
     freeRunPpq = 0.0;
 
-    for (auto* s : { &inGainS, &outGainS, &driveS, &driveMixS, &delayMixS, &feedbackS, &mixS, &pumpDepthS })
+    for (auto* s : { &inGainS, &outGainS, &driveS, &driveMixS, &delayMixS, &feedbackS, &mixS, &revMixS, &lfoDepthS })
         s->reset (sampleRate, 0.03);
     delayTimeSmoothed.reset (sampleRate, 0.25);
 
@@ -246,7 +268,9 @@ void DubBassProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     delayMixS.setCurrentAndTargetValue (pDelayMix->load());
     feedbackS.setCurrentAndTargetValue (pFeedback->load());
     mixS.setCurrentAndTargetValue (pMix->load());
-    pumpDepthS.setCurrentAndTargetValue (pPumpDepth->load());
+    revMixS.setCurrentAndTargetValue (pRevMix->load());
+    lfoDepthS.setCurrentAndTargetValue (pLfoDepth->load());
+    reverb.prepare (sampleRate);
     delayTimeSmoothed.setCurrentAndTargetValue ((float) (sampleRate * 60.0 / 124.0 * 0.75));
 
     updateFilters();
@@ -340,15 +364,16 @@ void DubBassProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     delayMixS.setTargetValue (pDelayMix->load());
     feedbackS.setTargetValue (pFeedback->load());
     mixS.setTargetValue (pMix->load());
-    pumpDepthS.setTargetValue (pPumpDepth->load());
+    revMixS.setTargetValue (pRevMix->load());
+    lfoDepthS.setTargetValue (pLfoDepth->load());
+    reverb.setParameters (pRevSize->load(), pRevTone->load(), pRevLowCut->load() > 0.5f);
 
     const int divIdx = juce::jlimit (0, delayDivNames.size() - 1, (int) pDelayDiv->load());
     const float maxDelay = (float) delayBuffer.getNumSamples() - 4.0f;
     delayTimeSmoothed.setTargetValue (juce::jlimit (1.0f, maxDelay, (float) (delayDivBeats[divIdx] * 60.0 / bpm * sr)));
 
-    const int rateIdx = juce::jlimit (0, 2, (int) pPumpRate->load());
-    const double pumpBeats = pumpRateBeats[rateIdx];
-    const float pumpRelease = pPumpRelease->load();
+    const int lfoIdx = juce::jlimit (0, lfoRateNames.size() - 1, (int) pLfoRate->load());
+    const double lfoBeats = lfoRateBeats[lfoIdx];
 
     const float cutoff = pCutoff->load();
     const float envAmt = pEnvAmt->load();
@@ -365,7 +390,7 @@ void DubBassProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
     float* dR = delayBuffer.getWritePointer (1);
     const int dSize = delayBuffer.getNumSamples();
 
-    float peak = 0.0f, lastPump = 1.0f;
+    float peak = 0.0f, lfoValue = 0.0f;
     int scopePos = scopeWritePos.load();
 
     for (int n = 0; n < numSamples; ++n)
@@ -409,10 +434,13 @@ void DubBassProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
             envelope = level + coef * (envelope - level);
         }
 
+        // Filter-LFO: Sinus synchron zur DAW-Position, bis ±2.5 Oktaven
+        const float lfoDepth = lfoDepthS.getNextValue();
         if ((n & 7) == 0)
         {
+            lfoValue = (float) std::sin (juce::MathConstants<double>::twoPi * std::fmod (ppq, lfoBeats) / lfoBeats);
             const float envNorm = juce::jlimit (0.0f, 1.0f, envelope * 2.0f);
-            const float fc = juce::jlimit (20.0f, maxCut, cutoff * std::exp2 (envAmt * 5.0f * envNorm));
+            const float fc = juce::jlimit (20.0f, maxCut, cutoff * std::exp2 (envAmt * 5.0f * envNorm + lfoDepth * 2.5f * lfoValue));
             envFilter.setCutoffFrequency (fc);
         }
         for (int ch = 0; ch < 2; ++ch)
@@ -445,19 +473,19 @@ void DubBassProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
         x[0] += dlMix * tapL;
         x[1] += dlMix * tapR;
 
-        // 5) Pump (tempo-synchrones Ducking)
-        const double phase = std::fmod (ppq, pumpBeats) / pumpBeats;
-        const float t = juce::jlimit (0.0f, 1.0f, (float) phase / pumpRelease);
-        const float shape = t * t * (3.0f - 2.0f * t);
-        const float pump = 1.0f - pumpDepthS.getNextValue() * (1.0f - shape);
-        lastPump = pump;
+        // 5) Reverb (Send nach dem Delay)
+        float revL, revR;
+        reverb.process (x[0], x[1], revL, revR);
+        const float rvMix = revMixS.getNextValue();
+        x[0] += rvMix * revL;
+        x[1] += rvMix * revR;
         ppq += ppqPerSample;
 
         // 6) Mix + Output
         const float wetMix = mixS.getNextValue();
         const float outG = outGainS.getNextValue();
-        const float oL = (dryL + wetMix * (x[0] * pump - dryL)) * outG;
-        const float oR = (dryR + wetMix * (x[1] * pump - dryR)) * outG;
+        const float oL = (dryL + wetMix * (x[0] - dryL)) * outG;
+        const float oR = (dryR + wetMix * (x[1] - dryR)) * outG;
 
         L[n] = oL;
         if (stereo) R[n] = oR;
@@ -471,7 +499,8 @@ void DubBassProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
         freeRunPpq = std::fmod (ppq, 64.0);
 
     envDisplay.store (envelope);
-    pumpDisplay.store (lastPump);
+    lfoDisplay.store (lfoValue * pLfoDepth->load());
+    reverbDisplay.store (juce::jlimit (0.0f, 1.0f, std::sqrt (reverb.getEnergy()) * 4.0f * pRevMix->load()));
     outLevel.store (juce::jmax (peak, outLevel.load() * 0.85f));
 }
 

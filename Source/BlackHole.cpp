@@ -38,8 +38,9 @@ static int groupIndexFor (const juce::String& id)
     if (id.startsWith ("drive")) return 2;
     if (id.startsWith ("delay") || id == "feedback" || id == "pingPong") return 3;
     if (id == "cutoff" || id == "reso" || id.startsWith ("env") || id == "filterType") return 1;
-    if (id.startsWith ("pump")) return 4;
-    if (id.startsWith ("osc") || id.startsWith ("amp") || id == "glide" || id == "legato"
+    if (id.startsWith ("rev")) return 4;
+    if (id.startsWith ("lfo")) return 1;
+    if (id.startsWith ("osc") || id.startsWith ("amp") || id.startsWith ("chord") || id == "glide" || id == "legato"
         || id == "velocity" || id == "drift") return 5;
     return 0; // Low End, Pegel, Mix
 }
@@ -85,7 +86,7 @@ BlackHole::BlackHole (DubBassProcessor& p) : proc (p)
         gaussTable[i] = std::exp (-(float) i / 512.0f * 9.0f);
 
     lastTime = juce::Time::getMillisecondCounterHiRes();
-    startTimerHz (60);
+    startTimerHz (30);
 }
 
 BlackHole::~BlackHole() { stopTimer(); }
@@ -152,7 +153,7 @@ void BlackHole::detectParameterChanges()
     total = juce::jmin (total, 3.0f);
 
     // Partikel: Farbe nach Gruppe, Anzahl nach Stärke der Änderung
-    const juce::Colour groupColour[] = { white, ice, ember, violet, ice.interpolatedWith (white, 0.5f), white };
+    const juce::Colour groupColour[] = { white, ice, ember, violet, violet.interpolatedWith (ice, 0.5f), white };
     for (int g = 0; g < 6; ++g)
     {
         if (groupDelta[g] <= 0.0f) continue;
@@ -174,7 +175,7 @@ void BlackHole::detectParameterChanges()
     flare = juce::jmin (2.0f, flare + groupDelta[1] * 6.0f);
     if (! programChange)
         rsVel += juce::jlimit (-1.2f, 1.2f, groupSign[0] * 5.0f) + groupDelta[5] * 0.8f;
-    breathKick = juce::jmin (1.0f, breathKick + groupDelta[4] * 5.0f);
+    bloom = juce::jmin (1.5f, bloom + groupDelta[4] * 6.0f);
     spinBoost = juce::jmin (6.0f, spinBoost + total * 5.0f);
     burstFlash = juce::jmin (1.0f, burstFlash + total * 2.5f);
 
@@ -194,11 +195,11 @@ void BlackHole::updateVisualState (float dt)
 
     const float peak = proc.outLevel.load();
     const float env = juce::jlimit (0.0f, 1.0f, proc.envDisplay.load() * 2.0f);
-    const float pumpGain = proc.pumpDisplay.load();
 
     approach (level, juce::jlimit (0.0f, 1.0f, juce::jmap (juce::Decibels::gainToDecibels (peak, -60.0f), -48.0f, 0.0f, 0.0f, 1.0f)), 12.0f);
     approach (envFlare, env, 20.0f);
-    approach (duck, 1.0f - pumpGain, 25.0f);
+    approach (tail, proc.reverbDisplay.load(), 6.0f);
+    approach (lfo, proc.lfoDisplay.load(), 20.0f);
 
     // Parameter -> Aussehen
     approach (heat, norm ("cutoff"), 8.0f);
@@ -210,19 +211,25 @@ void BlackHole::updateVisualState (float dt)
     approach (echoAmt, norm ("delayMix"), 8.0f);
     approach (echoDecay, 0.35f + 0.6f * norm ("feedback"), 8.0f);
     approach (diskAmt, 0.3f + 0.7f * norm ("mix"), 8.0f);
+    approach (hazeAmt, norm ("revMix"), 6.0f);
+    approach (hazeSize, norm ("revSize"), 6.0f);
+    approach (hazeTone, norm ("revTone"), 6.0f);
     approach (rout, 3.0f + 1.4f * norm ("feedback") * norm ("delayMix") + 0.6f * norm ("driveMix") * norm ("drive"), 6.0f);
 
     if (DubBassProcessor::isSynth)
     {
         texStyle = (int) std::round (norm ("osc1Wave") * 4.0f);
         approach (wobble, norm ("drift"), 6.0f);
+        const int chordSizes[] = { 4, 5, 3, 3 };
+        const int chordIdx = juce::jlimit (0, 3, (int) std::round (norm ("chordType") * 3.0f));
+        approach (chordRings, norm ("chordOn") > 0.5f ? (float) (chordSizes[chordIdx] - 1) : 0.0f, 8.0f);
         approach (binary, norm ("osc2Level") * juce::jmin (1.0f, std::abs (norm ("osc2Fine") - 0.5f) * 4.0f
                                                                  + std::abs (norm ("osc2Semi") - 0.5f) * 2.0f), 6.0f);
     }
 
     // Masse als Feder: Zielgröße aus Sub, Pegel, Low Cut; reagiert auf Audio und Pump
     const float rsTarget = 0.30f + 0.16f * norm ("subGain") + 0.07f * norm ("inGain") + 0.05f * (1.0f - norm ("lowCut"))
-                         + 0.06f * level - 0.06f * duck * (0.5f + 0.5f * norm ("pumpDepth")) - 0.05f * breathKick;
+                         + 0.06f * level + 0.03f * bloom;
     const float acc = 70.0f * (rsTarget - rs) - 7.5f * rsVel;
     rsVel += acc * dt;
     rs = juce::jlimit (0.16f, 0.68f, rs + rsVel * dt);
@@ -232,7 +239,7 @@ void BlackHole::updateVisualState (float dt)
 
     // Abklingen der Kicks
     const float decay = std::exp (-dt * 3.5f);
-    flare *= decay; glitch *= std::exp (-dt * 5.0f); breathKick *= decay; burstFlash *= std::exp (-dt * 6.0f);
+    flare *= decay; glitch *= std::exp (-dt * 5.0f); bloom *= std::exp (-dt * 2.0f); burstFlash *= std::exp (-dt * 6.0f);
     spinBoost *= std::exp (-dt * 2.0f); horizonFlash *= std::exp (-dt * 4.0f);
     hudAlpha = juce::jmax (0.0f, hudAlpha - dt * 0.6f);
     waveCooldown -= dt;
@@ -340,7 +347,14 @@ void BlackHole::renderRaster()
     const float rin = R * 1.55f, outer = R * rout;
     const float invTilt = 1.0f / tilt;
     const float lens = 1.5f;
-    const float brightness = (0.75f + 0.5f * level + 0.6f * envFlare + 0.6f * flare + 0.4f * burstFlash) * (1.0f - 0.35f * duck);
+    const float brightness = (0.75f + 0.5f * level + 0.6f * envFlare + 0.6f * flare + 0.4f * burstFlash) * (1.0f + 0.4f * lfo);
+
+    // Hall-Nebel: Ausdehnung = Size, Dichte = Mix (+ Nachhall), Farbe = Tone
+    const float haze = juce::jlimit (0.0f, 1.5f, hazeAmt * (0.45f + 1.4f * tail) + bloom * 0.5f);
+    const float hazeRadius = R * (1.8f + 3.6f * hazeSize + bloom * 1.2f);
+    const float hazeInv = 1.0f / hazeRadius;
+    const float hr = 0.16f + hazeTone * 0.20f, hg = 0.07f + hazeTone * 0.45f, hb = 0.36f + hazeTone * 0.45f;
+    const int chordCount = juce::roundToInt (chordRings);
     const float ringA = ringAmt * (1.0f + flare * 0.6f + horizonFlash * 1.5f);
     const float ringInvW = 1.0f / (R * ringWidth);
     const int echoes = juce::roundToInt (echoCount);
@@ -408,6 +422,10 @@ void BlackHole::renderRaster()
                     e += ringA * 0.45f * binary * gauss ((rb - R * 1.06f) * ringInvW);
                 }
 
+                // Akkord-Ringe: ein Ring pro zusätzlichem Akkordton
+                for (int k = 1; k <= chordCount; ++k)
+                    e += (0.25f + ringA * 0.35f) * gauss ((r - R * (1.03f + 0.12f * (float) k)) * ringInvW * 1.2f);
+
                 // Echo-Ringe (Delay)
                 float amp = echoAmt;
                 for (int k = 1; k <= echoes; ++k)
@@ -433,9 +451,16 @@ void BlackHole::renderRaster()
 
             e *= brightness;
             const int ci = juce::jlimit (0, 255, (int) (e * 255.0f));
-            planeR[idx] = br + colourMap[(size_t) (ci * 3)];
-            planeG[idx] = bgc + colourMap[(size_t) (ci * 3 + 1)];
-            planeB[idx] = bb + colourMap[(size_t) (ci * 3 + 2)];
+            float hz = 0.0f;
+            if (haze > 0.005f && r > R)
+            {
+                const float q = r * hazeInv;
+                const float cloud = 0.55f + 0.45f * tex (fastAtan2 (dy, dx) * twoPiInv * 0.5f + time * 0.012f, q * 0.5f);
+                hz = haze * cloud * gauss (q * 1.6f) * smoothstep (R, R * 1.25f, r) * 0.55f;
+            }
+            planeR[idx] = br + colourMap[(size_t) (ci * 3)] + hz * hr;
+            planeG[idx] = bgc + colourMap[(size_t) (ci * 3 + 1)] + hz * hg;
+            planeB[idx] = bb + colourMap[(size_t) (ci * 3 + 2)] + hz * hb;
         }
     }
 
@@ -488,6 +513,12 @@ void BlackHole::renderRaster()
 //==============================================================================
 void BlackHole::timerCallback()
 {
+    if (! isShowing())
+    {
+        lastTime = juce::Time::getMillisecondCounterHiRes();
+        return;
+    }
+
     const double now = juce::Time::getMillisecondCounterHiRes();
     const float dt = (float) juce::jlimit (0.001, 0.05, (now - lastTime) * 0.001);
     lastTime = now;

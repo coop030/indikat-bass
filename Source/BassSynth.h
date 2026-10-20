@@ -9,6 +9,8 @@ class BassSynth
 {
 public:
     static const juce::StringArray waveNames;
+    static const juce::StringArray chordNames;
+    static constexpr int maxChordNotes = 5;
 
     static void addParameters (std::vector<std::unique_ptr<juce::RangedAudioParameter>>& p);
 
@@ -38,8 +40,8 @@ private:
     float velocity = 1.0f;
     float pitchBend = 0.0f;
 
-    // Oszillatoren
-    double phase1 = 0.0, phase2 = 0.0, phaseSub = 0.0;
+    // Oszillatoren (pro Akkordton eigene Phasen)
+    double phase1[maxChordNotes] {}, phase2[maxChordNotes] {}, phaseSub = 0.0;
     float drift1 = 0.0f, drift2 = 0.0f, driftTarget1 = 0.0f, driftTarget2 = 0.0f;
     int driftCounter = 0;
     juce::Random random;
@@ -58,4 +60,5 @@ private:
     std::atomic<float>* pGlide; std::atomic<float>* pLegato; std::atomic<float>* pVelocity; std::atomic<float>* pDrift;
     std::atomic<float>* pAmpA; std::atomic<float>* pAmpD; std::atomic<float>* pAmpS; std::atomic<float>* pAmpR;
     std::atomic<float>* pFiltA; std::atomic<float>* pFiltD;
+    std::atomic<float>* pChordOn; std::atomic<float>* pChordType;
 };

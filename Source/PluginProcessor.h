@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_dsp/juce_dsp.h>
 #include "BassSynth.h"
+#include "DubReverb.h"
 
 #ifndef DUBBASS_SYNTH
  #define DUBBASS_SYNTH 0
@@ -10,7 +11,7 @@
 
 // Signalfluss (im Synth ersetzt der Bass-Synth den Input und seine Filter-Hüllkurve den Envelope Follower):
 // Input -> Low Cut -> Mono Bass (unterhalb Crossover) -> Sub Shelf -> Drive
-//       -> Envelope Filter -> Dub Delay (Send, mit Low Cut) -> Pump -> Mix -> Output
+//       -> Envelope Filter (+ LFO) -> Dub Delay (Send, mit Low Cut) -> Reverb (Send) -> Mix -> Output
 class DubBassProcessor : public juce::AudioProcessor
 {
 public:
@@ -29,7 +30,7 @@ public:
     bool acceptsMidi() const override { return DUBBASS_SYNTH != 0; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 4.0; }
+    double getTailLengthSeconds() const override { return 12.0; }
 
     int getNumPrograms() override;
     int getCurrentProgram() override { return currentProgram; }
@@ -47,7 +48,8 @@ public:
 
     // Für die GUI (Meter / Envelope-Anzeige)
     std::atomic<float> envDisplay { 0.0f };
-    std::atomic<float> pumpDisplay { 1.0f };
+    std::atomic<float> lfoDisplay { 0.0f };
+    std::atomic<float> reverbDisplay { 0.0f };
     std::atomic<float> outLevel { 0.0f };
 
     // Oszilloskop: Ringpuffer des Ausgangs (Mono), wird von der GUI gelesen
@@ -88,11 +90,12 @@ private:
     int delayWritePos = 0;
     juce::SmoothedValue<float> delayTimeSmoothed;
 
-    // Pump
+    // Reverb, freilaufende Position ohne Host-Transport (LFO)
+    DubReverb reverb;
     double freeRunPpq = 0.0;
 
     // Glättung
-    juce::SmoothedValue<float> inGainS, outGainS, driveS, driveMixS, delayMixS, feedbackS, mixS, pumpDepthS;
+    juce::SmoothedValue<float> inGainS, outGainS, driveS, driveMixS, delayMixS, feedbackS, mixS, revMixS, lfoDepthS;
 
     // Parameter-Pointer
     std::atomic<float>* pInGain;
@@ -115,9 +118,12 @@ private:
     std::atomic<float>* pDelayTone;
     std::atomic<float>* pDelayMix;
     std::atomic<float>* pPingPong;
-    std::atomic<float>* pPumpRate;
-    std::atomic<float>* pPumpDepth;
-    std::atomic<float>* pPumpRelease;
+    std::atomic<float>* pRevSize;
+    std::atomic<float>* pRevTone;
+    std::atomic<float>* pRevMix;
+    std::atomic<float>* pRevLowCut;
+    std::atomic<float>* pLfoRate;
+    std::atomic<float>* pLfoDepth;
     std::atomic<float>* pMix;
     std::atomic<float>* pOutGain;
 

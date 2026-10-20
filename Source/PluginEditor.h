@@ -81,6 +81,7 @@ private:
         juce::String title;
         std::vector<Knob*> knobs;
         std::vector<std::pair<juce::Component*, int>> headerControls; // Komponente + Breite
+        float extraWeight = 0.0f;                                      // zusätzliche Breite für volle Header
         juce::Rectangle<int> bounds;
     };
 
@@ -88,7 +89,7 @@ private:
     void addChoice (juce::ComboBox&, std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>&,
                     const juce::String& paramId);
     void addSection (const juce::String& title, std::initializer_list<Knob*>,
-                     std::vector<std::pair<juce::Component*, int>> header = {});
+                     std::vector<std::pair<juce::Component*, int>> header = {}, float extraWeight = 0.0f);
     void layoutSection (Section&, juce::Rectangle<int>);
     void place (juce::Rectangle<int> row, std::initializer_list<int> sectionIndices);
     void renderBackground();
@@ -102,20 +103,20 @@ private:
     std::vector<std::unique_ptr<Knob>> knobs;
     std::vector<Section> sections;
 
-    juce::ComboBox filterType, delayDiv, pumpRate, presetBox, osc1Wave, osc2Wave, legato;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> filterTypeAtt, delayDivAtt, pumpRateAtt,
-                                                                           osc1WaveAtt, osc2WaveAtt, legatoAtt;
+    juce::ComboBox filterType, lfoRate, delayDiv, presetBox, osc1Wave, osc2Wave, legato, chordType;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> filterTypeAtt, lfoRateAtt, delayDivAtt,
+                                                                           osc1WaveAtt, osc2WaveAtt, legatoAtt, chordTypeAtt;
     juce::TextButton prevPreset { "<" }, nextPreset { ">" };
-    juce::ToggleButton pingPong { "PING PONG" };
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> pingPongAtt;
+    juce::ToggleButton pingPong { "PING PONG" }, revLowCut { "LOW CUT" }, chordOn { "CHORD" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> pingPongAtt, revLowCutAtt, chordOnAtt;
 
     BlackHole blackHole;
     std::unique_ptr<SpaceKeyboard> keyboard;
 
     juce::Image background;
     std::unique_ptr<juce::Drawable> logo;
-    juce::Rectangle<int> meterArea, pumpDot;
-    float envShown = 0.0f, levelShown = 0.0f, pumpShown = 0.0f;
+    juce::Rectangle<int> meterArea;
+    float envShown = 0.0f, levelShown = 0.0f, reverbShown = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IndikatPanel)
 };

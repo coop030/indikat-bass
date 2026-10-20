@@ -14,7 +14,7 @@ public:
     void paint (juce::Graphics&) override;
 
 private:
-    enum class Group { Mass, Filter, Drive, Echo, Pump, Voice };
+    enum class Group { Mass, Filter, Drive, Echo, Reverb, Voice };
 
     struct Particle
     {
@@ -59,13 +59,14 @@ private:
     double lastTime = 0.0;
     float time = 0.0f, spinPhase = 0.0f;
     float rs = 0.4f, rsVel = 0.0f;
-    float flare = 0.0f, glitch = 0.0f, horizonFlash = 0.0f, breathKick = 0.0f, spinBoost = 0.0f, burstFlash = 0.0f;
+    float flare = 0.0f, glitch = 0.0f, horizonFlash = 0.0f, bloom = 0.0f, spinBoost = 0.0f, burstFlash = 0.0f;
     float waveCooldown = 0.0f;
 
     // Geglättete Darstellungswerte
     float heat = 0.5f, crunch = 0.0f, ringAmt = 0.5f, ringWidth = 0.06f, tilt = 0.25f;
     float echoCount = 0.0f, echoAmt = 0.0f, echoDecay = 0.5f, wobble = 0.0f, binary = 0.0f;
-    float diskAmt = 1.0f, level = 0.0f, envFlare = 0.0f, duck = 0.0f, rout = 3.4f;
+    float diskAmt = 1.0f, level = 0.0f, envFlare = 0.0f, rout = 3.4f;
+    float hazeAmt = 0.0f, hazeSize = 0.5f, hazeTone = 0.4f, tail = 0.0f, lfo = 0.0f, chordRings = 0.0f;
     int texStyle = 2;
     juce::Point<float> wobbleOffset;
 

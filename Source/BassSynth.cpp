@@ -1,6 +1,19 @@
 #include "BassSynth.h"
 
 const juce::StringArray BassSynth::waveNames { "Sine", "Triangle", "Saw", "Square", "Pulse" };
+const juce::StringArray BassSynth::chordNames { "m7", "m9", "Minor", "Fifth" };
+
+namespace
+{
+    // Akkord-Intervalle in Halbtönen (Grundton zuerst)
+    struct Chord { int size; float intervals[BassSynth::maxChordNotes]; };
+    const Chord chords[] = {
+        { 4, { 0, 3, 7, 10, 0 } },      // m7: klassischer Dub-Chord
+        { 5, { 0, 3, 7, 10, 14 } },     // m9
+        { 3, { 0, 3, 7, 0, 0 } },       // Moll
+        { 3, { 0, 7, 12, 0, 0 } },      // Quinte + Oktave
+    };
+}
 
 namespace
 {
@@ -53,6 +66,8 @@ void BassSynth::addParameters (std::vector<std::unique_ptr<juce::RangedAudioPara
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "osc2Level", 1 }, "Osc 2 Level", NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "subLevel", 1 }, "Sub Osc", NormalisableRange<float> (0.0f, 1.0f), 0.0f, pct));
 
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "chordOn", 1 }, "Chord", StringArray { "Off", "On" }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "chordType", 1 }, "Chord Type", chordNames, 0));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "glide", 1 }, "Glide", msRange (0.0f, 1000.0f, 120.0f), 0.0f, ms));
     p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "legato", 1 }, "Mode", StringArray { "Retrig", "Legato" }, 0));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "velocity", 1 }, "Velocity", NormalisableRange<float> (0.0f, 1.0f), 0.5f, pct));
@@ -76,6 +91,7 @@ void BassSynth::init (juce::AudioProcessorValueTreeState& apvts)
     pAmpR = get ("ampRelease");
     // Filter-Hüllkurve nutzt Attack/Release-Regler des Env Filters (im Synth: Attack/Decay)
     pFiltA = get ("envAttack");     pFiltD = get ("envRelease");
+    pChordOn = get ("chordOn");     pChordType = get ("chordType");
 }
 
 void BassSynth::prepare (double sampleRate)
@@ -85,7 +101,9 @@ void BassSynth::prepare (double sampleRate)
     currentNote = -1;
     ampStage = Stage::Idle;
     ampEnv = filterEnv = 0.0f;
-    phase1 = phase2 = phaseSub = 0.0;
+    std::fill (std::begin (phase1), std::end (phase1), 0.0);
+    std::fill (std::begin (phase2), std::end (phase2), 0.0);
+    phaseSub = 0.0;
     for (auto* s : { &level1, &level2, &levelSub })
         s->reset (sampleRate, 0.02);
     level1.setCurrentAndTargetValue (pOsc1Level->load());
@@ -148,7 +166,9 @@ void BassSynth::startNote (int note, bool retrigger)
     if (fromSilence)
     {
         // Phasen-Reset -> jede Note startet gleich (tight, kein Klick bei Sinus)
-        phase1 = phase2 = phaseSub = 0.0;
+        std::fill (std::begin (phase1), std::end (phase1), 0.0);
+        std::fill (std::begin (phase2), std::end (phase2), 0.0);
+        phaseSub = 0.0;
     }
 
     if (retrigger || fromSilence)
@@ -197,6 +217,10 @@ void BassSynth::render (const juce::MidiBuffer& midi, float* out, float* filterM
     const float releaseCoef = coefFor (pAmpR->load() * 0.3f, sr);
     const float fAttackInc = 1.0f / (juce::jmax (0.1f, pFiltA->load()) * 0.001f * (float) sr);
     const float fDecayCoef = coefFor (pFiltD->load() * 0.4f, sr);
+
+    const auto& chord = chords[juce::jlimit (0, (int) std::size (chords) - 1, (int) pChordType->load())];
+    const int numNotes = pChordOn->load() > 0.5f ? chord.size : 1;
+    const float chordGain = 1.0f / std::sqrt ((float) numNotes);
 
     auto midiIt = midi.begin();
 
@@ -263,17 +287,24 @@ void BassSynth::render (const juce::MidiBuffer& midi, float* out, float* filterM
             continue;
         }
 
-        const double f1 = 440.0 * std::exp2 ((base + oct1 + drift1 * 0.01f - 69.0f) / 12.0f);
-        const double f2 = 440.0 * std::exp2 ((base + off2 + drift2 * 0.01f - 69.0f) / 12.0f);
-        const double fs = 440.0 * std::exp2 ((base + oct1 - 12.0f - 69.0f) / 12.0f);
-        const double i1 = juce::jmin (0.45, f1 / sr), i2 = juce::jmin (0.45, f2 / sr), is = fs / sr;
+        const float l1 = level1.getNextValue(), l2 = level2.getNextValue();
+        float s = 0.0f;
 
-        float s = level1.getNextValue() * oscillator (w1, phase1, i1)
-                + level2.getNextValue() * oscillator (w2, phase2, i2)
-                + levelSub.getNextValue() * (float) std::sin (phaseSub * juce::MathConstants<double>::twoPi);
+        // Jeder Akkordton bekommt OSC 1 + OSC 2; Glide zieht den ganzen Akkord mit
+        for (int k = 0; k < numNotes; ++k)
+        {
+            const float note = base + chord.intervals[k] * (numNotes > 1 ? 1.0f : 0.0f);
+            const double f1 = 440.0 * std::exp2 ((note + oct1 + drift1 * 0.01f - 69.0f) / 12.0f);
+            const double f2 = 440.0 * std::exp2 ((note + off2 + drift2 * 0.01f - 69.0f) / 12.0f);
+            const double i1 = juce::jmin (0.45, f1 / sr), i2 = juce::jmin (0.45, f2 / sr);
+            s += chordGain * (l1 * oscillator (w1, phase1[k], i1) + l2 * oscillator (w2, phase2[k], i2));
+            phase1[k] = wrap (phase1[k] + i1);
+            phase2[k] = wrap (phase2[k] + i2);
+        }
 
-        phase1 = wrap (phase1 + i1);
-        phase2 = wrap (phase2 + i2);
+        // Sub nur auf dem Grundton
+        const double is = 440.0 * std::exp2 ((base + oct1 - 12.0f - 69.0f) / 12.0f) / sr;
+        s += levelSub.getNextValue() * (float) std::sin (phaseSub * juce::MathConstants<double>::twoPi);
         phaseSub = wrap (phaseSub + is);
 
         out[n] = s * ampEnv * velocity * 0.5f;

@@ -296,12 +296,16 @@ IndikatPanel::IndikatPanel (DubBassProcessor& p)
                                &addKnob ("osc2Fine", "FINE"), &addKnob ("osc2Level", "LEVEL") },
                     { { &osc2Wave, 92 } });
 
-        addSection ("AMP", { &addKnob ("ampAttack", "ATTACK"), &addKnob ("ampDecay", "DECAY"),
-                             &addKnob ("ampSustain", "SUSTAIN"), &addKnob ("ampRelease", "RELEASE") });
-
         addChoice (legato, legatoAtt, "legato");
-        addSection ("VOICE", { &addKnob ("glide", "GLIDE"), &addKnob ("velocity", "VELOCITY"), &addKnob ("drift", "DRIFT") },
+        addSection ("AMP", { &addKnob ("ampAttack", "ATTACK"), &addKnob ("ampDecay", "DECAY"),
+                             &addKnob ("ampSustain", "SUSTAIN"), &addKnob ("ampRelease", "RELEASE") },
                     { { &legato, 84 } });
+
+        addChoice (chordType, chordTypeAtt, "chordType");
+        chordOnAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "chordOn", chordOn);
+        addAndMakeVisible (chordOn);
+        addSection ("VOICE", { &addKnob ("glide", "GLIDE"), &addKnob ("velocity", "VELOCITY"), &addKnob ("drift", "DRIFT") },
+                    { { &chordType, 66 }, { &chordOn, 78 } }, 0.9f);
     }
 
     addSection ("LOW END", { &addKnob ("lowCut", "LOW CUT"), &addKnob ("monoFreq", "MONO"),
@@ -310,18 +314,22 @@ IndikatPanel::IndikatPanel (DubBassProcessor& p)
     addSection ("DRIVE", { &addKnob ("drive", "DRIVE"), &addKnob ("driveTone", "TONE"), &addKnob ("driveMix", "MIX") });
 
     addChoice (filterType, filterTypeAtt, "filterType");
+    addChoice (lfoRate, lfoRateAtt, "lfoRate");
     addSection ("FILTER", { &addKnob ("cutoff", "CUTOFF"), &addKnob ("reso", "RESO"), &addKnob ("envAmt", "ENV"),
                             &addKnob ("envAttack", "ATTACK"),
-                            &addKnob ("envRelease", DubBassProcessor::isSynth ? "DECAY" : "RELEASE") },
-                { { &filterType, 100 } });
+                            &addKnob ("envRelease", DubBassProcessor::isSynth ? "DECAY" : "RELEASE"),
+                            &addKnob ("lfoDepth", "LFO") },
+                { { &lfoRate, 84 }, { &filterType, 96 } });
 
     addChoice (delayDiv, delayDivAtt, "delayDiv");
     addSection ("DUB DELAY", { &addKnob ("feedback", "FEEDBACK"), &addKnob ("delayLowCut", "LOW CUT"),
                                &addKnob ("delayTone", "TONE"), &addKnob ("delayMix", "MIX") },
                 { { &delayDiv, 84 }, { &pingPong, 104 } });
 
-    addChoice (pumpRate, pumpRateAtt, "pumpRate");
-    addSection ("PUMP", { &addKnob ("pumpDepth", "DEPTH"), &addKnob ("pumpRelease", "RELEASE") }, { { &pumpRate, 64 } });
+    revLowCutAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "revLowCut", revLowCut);
+    addAndMakeVisible (revLowCut);
+    addSection ("REVERB", { &addKnob ("revSize", "SIZE"), &addKnob ("revTone", "TONE"), &addKnob ("revMix", "MIX") },
+                { { &revLowCut, 88 } });
 
     addSection ("OUT", { &addKnob ("inGain", DubBassProcessor::isSynth ? "LEVEL" : "INPUT"),
                          &addKnob ("mix", "DRY/WET"), &addKnob ("outGain", "OUTPUT") });
@@ -362,7 +370,7 @@ IndikatPanel::IndikatPanel (DubBassProcessor& p)
     }
 
     setSize (baseWidth(), baseHeight());
-    startTimerHz (40);
+    startTimerHz (30);
 }
 
 IndikatPanel::~IndikatPanel()
@@ -406,9 +414,9 @@ void IndikatPanel::addChoice (juce::ComboBox& box,
 }
 
 void IndikatPanel::addSection (const juce::String& title, std::initializer_list<Knob*> ks,
-                               std::vector<std::pair<juce::Component*, int>> header)
+                               std::vector<std::pair<juce::Component*, int>> header, float extraWeight)
 {
-    sections.push_back ({ title, ks, std::move (header), {} });
+    sections.push_back ({ title, ks, std::move (header), extraWeight, {} });
 }
 
 //==============================================================================
@@ -507,7 +515,7 @@ void IndikatPanel::paint (juce::Graphics& g)
     auto m = meterArea;
     const int rowH = m.getHeight() / 3;
     drawMeter (g, m.removeFromTop (rowH), "FILTER", envShown);
-    drawMeter (g, m.removeFromTop (rowH), "PUMP", pumpShown);
+    drawMeter (g, m.removeFromTop (rowH), "REVERB", reverbShown);
     drawMeter (g, m, "OUTPUT", levelShown);
 
     // Sektionen
@@ -527,16 +535,6 @@ void IndikatPanel::paint (juce::Graphics& g)
         g.setFont (fonts->wide (9.0f).withExtraKerningFactor (0.3f));
         g.setColour (Palette::text.withAlpha (0.85f));
         g.drawText (s.title, s.bounds.getX() + 36, s.bounds.getY() + 10, 200, 18, juce::Justification::centredLeft);
-    }
-
-    // Pump-Puls
-    if (! pumpDot.isEmpty())
-    {
-        const auto c = pumpDot.toFloat().getCentre();
-        g.setColour (Palette::hairHi);
-        g.drawEllipse (juce::Rectangle<float> (7.0f, 7.0f).withCentre (c), 1.0f);
-        if (pumpShown > 0.02f)
-            glowDot (g, c, 2.5f, Palette::accent.withAlpha (juce::jlimit (0.0f, 1.0f, pumpShown * 1.5f)));
     }
 
     // Rahmen der Tastatur
@@ -559,9 +557,6 @@ void IndikatPanel::layoutSection (Section& s, juce::Rectangle<int> r)
         header.removeFromRight (10);
     }
 
-    if (s.title == "PUMP")
-        pumpDot = juce::Rectangle<int> (s.bounds.getX() + 86, s.bounds.getY() + 14, 10, 10);
-
     inner.removeFromTop (8);
     const int knobW = inner.getWidth() / (int) s.knobs.size();
     for (auto* k : s.knobs)
@@ -575,15 +570,16 @@ void IndikatPanel::layoutSection (Section& s, juce::Rectangle<int> r)
 void IndikatPanel::place (juce::Rectangle<int> row, std::initializer_list<int> idx)
 {
     constexpr int gap = 12;
-    int totalKnobs = 0;
-    for (int i : idx) totalKnobs += (int) sections[(size_t) i].knobs.size();
+    auto weightOf = [this] (int i) { return (float) sections[(size_t) i].knobs.size() + sections[(size_t) i].extraWeight; };
+    float totalWeight = 0.0f;
+    for (int i : idx) totalWeight += weightOf (i);
     const int avail = row.getWidth() - gap * ((int) idx.size() - 1);
 
     int n = 0;
     for (int i : idx)
     {
         auto& s = sections[(size_t) i];
-        const int w = ++n == (int) idx.size() ? row.getWidth() : avail * (int) s.knobs.size() / totalKnobs;
+        const int w = ++n == (int) idx.size() ? row.getWidth() : juce::roundToInt ((float) avail * weightOf (i) / totalWeight);
         layoutSection (s, row.removeFromLeft (w));
         row.removeFromLeft (gap);
     }
@@ -636,18 +632,23 @@ void IndikatPanel::resized()
         place (rows[0], { 0, 1, 2 });
         place (rows[1], { 3, 4, 5 });
     }
+
+    // Alle Regler gleich groß: auf die schmalste Zelle angleichen
+    int knobWidth = std::numeric_limits<int>::max();
+    for (auto& k : knobs)
+        knobWidth = juce::jmin (knobWidth, k->slider.getWidth());
+    for (auto& k : knobs)
+        k->slider.setBounds (k->slider.getBounds().withSizeKeepingCentre (knobWidth, k->slider.getHeight()));
 }
 
 void IndikatPanel::timerCallback()
 {
     envShown = 0.7f * envShown + 0.3f * juce::jlimit (0.0f, 1.0f, proc.envDisplay.load() * 2.0f);
-    pumpShown = 1.0f - proc.pumpDisplay.load();
+    reverbShown = 0.8f * reverbShown + 0.2f * proc.reverbDisplay.load();
     const float db = juce::Decibels::gainToDecibels (proc.outLevel.load(), -60.0f);
     levelShown = 0.6f * levelShown + 0.4f * juce::jmap (db, -48.0f, 0.0f, 0.0f, 1.0f);
 
     repaint (meterArea.expanded (4));
-    if (! pumpDot.isEmpty())
-        repaint (pumpDot.expanded (12));
 
     if (presetBox.getSelectedId() != proc.getCurrentProgram() + 1)
     {
