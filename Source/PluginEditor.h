@@ -123,6 +123,7 @@ private:
     std::unique_ptr<SpaceKeyboard> keyboard;
 
     juce::Image background;
+    std::unique_ptr<juce::Drawable> logo;
     juce::Rectangle<int> meterArea, pumpDot;
     float envShown = 0.0f, levelShown = 0.0f, pumpShown = 0.0f;
 

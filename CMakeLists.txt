@@ -20,7 +20,8 @@ endif()
 juce_add_binary_data(IndikatFonts SOURCES
     Resources/Michroma-Regular.ttf
     Resources/Questrial-Regular.ttf
-    Resources/ShareTechMono-Regular.ttf)
+    Resources/ShareTechMono-Regular.ttf
+    Resources/indikat-logo.svg)
 
 set(DUBBASS_SOURCES
     Source/PluginProcessor.cpp

@@ -323,6 +323,13 @@ IndikatPanel::IndikatPanel (DubBassProcessor& p)
     setLookAndFeel (&lnf);
     setOpaque (true);
 
+    if (auto svg = juce::XmlDocument::parse (juce::String::fromUTF8 (BinaryData::indikatlogo_svg, BinaryData::indikatlogo_svgSize)))
+    {
+        logo = juce::Drawable::createFromSVG (*svg);
+        if (logo != nullptr)
+            logo->replaceColour (juce::Colours::white, Palette::text);
+    }
+
     if (DubBassProcessor::isSynth)
     {
         addChoice (osc1Wave, osc1WaveAtt, "osc1Wave");
@@ -515,10 +522,9 @@ void IndikatPanel::paint (juce::Graphics& g)
         renderBackground();
     g.drawImageAt (background, 0, 0);
 
-    // Logo
-    g.setColour (Palette::text);
-    g.setFont (fonts->wide (21.0f).withExtraKerningFactor (0.22f));
-    g.drawText ("indikat", 30, 26, 300, 30, juce::Justification::centredLeft);
+    // Logo (Vektor, 4.93 : 1)
+    if (logo != nullptr)
+        logo->drawWithin (g, { 30.0f, 31.0f, 22.0f * 4.93f, 22.0f }, juce::RectanglePlacement::xLeft, 1.0f);
     glowDot (g, { 33.0f, 70.0f }, 2.2f, Palette::accent);
     g.setColour (Palette::dim);
     g.setFont (fonts->mono (11.5f).withExtraKerningFactor (0.45f));
