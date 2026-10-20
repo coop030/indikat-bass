@@ -50,6 +50,13 @@ jobs:
           if [ "$RUNNER_OS" == "macOS" ]; then
             cp -R build/IndikatBassSynth_artefacts/Release/AU/*.component dist/INDIKAT-Bass/
             cp -R build/IndikatBassFX_artefacts/Release/AU/*.component dist/INDIKAT-Bass/
+            # Ad-hoc-Signatur: Apple Silicon lädt unsignierten Code nicht
+            for b in dist/INDIKAT-Bass/*.vst3 dist/INDIKAT-Bass/*.component; do
+              codesign --force --deep --sign - "$b"
+              codesign --verify --deep --strict "$b"
+            done
+            cp "packaging/macos/INDIKAT installieren.command" dist/INDIKAT-Bass/
+            chmod +x "dist/INDIKAT-Bass/INDIKAT installieren.command"
             (cd dist && ditto -c -k --keepParent INDIKAT-Bass "INDIKAT-Bass-${{ matrix.name }}.zip")
           elif [ "$RUNNER_OS" == "Windows" ]; then
             (cd dist && 7z a -tzip "INDIKAT-Bass-${{ matrix.name }}.zip" INDIKAT-Bass > /dev/null)
@@ -87,7 +94,8 @@ jobs:
             Automatischer Build von `${{ github.sha }}`.
 
             **Windows:** ZIP entpacken, beide `.vst3` nach `C:\Program Files\Common Files\VST3\` kopieren.
-            **macOS:** ZIP entpacken, `.vst3` nach `~/Library/Audio/Plug-Ins/VST3/`, `.component` nach `~/Library/Audio/Plug-Ins/Components/`.
-            Danach im Terminal einmal: `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/INDIKAT* ~/Library/Audio/Plug-Ins/Components/INDIKAT*`
+            **macOS:** ZIP entpacken (Doppelklick), dann Terminal öffnen und eingeben:
+            `bash ~/Downloads/INDIKAT-Bass/INDIKAT\ installieren.command`
+            Das Skript kopiert VST3 + AU an die richtige Stelle, hebt die Quarantäne auf und signiert die Plugins lokal.
             **Linux:** `.vst3` nach `~/.vst3/`.
           files: dist/*.zip
