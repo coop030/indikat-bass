@@ -1,10 +1,28 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-PlutoProcessor::PlutoProcessor()
-    : AudioProcessor (BusesProperties().withInput ("Input", juce::AudioChannelSet::stereo(), true)
-                                       .withOutput ("Output", juce::AudioChannelSet::stereo(), true))
+namespace
 {
+    juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
+    {
+        juce::StringArray keys, scales;
+        for (int i = 0; i < 12; ++i) keys.add (PlutoEngine::noteName (i));
+        for (int i = 0; i < PlutoEngine::numScales; ++i) scales.add (PlutoEngine::scaleName (i));
+
+        juce::AudioProcessorValueTreeState::ParameterLayout layout;
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "key", 1 }, "Key", keys, 9));
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "scale", 1 }, "Scale", scales, 4));
+        return layout;
+    }
+}
+
+// Generator: kein Audio-Eingang, die Atmo entsteht komplett im Plugin
+PlutoProcessor::PlutoProcessor()
+    : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+      apvts (*this, nullptr, "PLUTO", createLayout())
+{
+    keyParam = apvts.getRawParameterValue ("key");
+    scaleParam = apvts.getRawParameterValue ("scale");
     randomize();
 }
 
@@ -22,10 +40,7 @@ void PlutoProcessor::setSeed (juce::uint32 s)
 bool PlutoProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
     const auto out = layouts.getMainOutputChannelSet();
-    if (out != juce::AudioChannelSet::stereo() && out != juce::AudioChannelSet::mono())
-        return false;
-    const auto in = layouts.getMainInputChannelSet();
-    return in.isDisabled() || in == out;
+    return out == juce::AudioChannelSet::stereo() || out == juce::AudioChannelSet::mono();
 }
 
 void PlutoProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -37,9 +52,9 @@ void PlutoProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
 {
     juce::ScopedNoDenormals noDenormals;
 
-    const int numIn = getTotalNumInputChannels(), numOut = getTotalNumOutputChannels();
-    for (int ch = numIn; ch < numOut; ++ch)
-        buffer.clear (ch, 0, buffer.getNumSamples());
+    const int numOut = getTotalNumOutputChannels();
+    buffer.clear();
+    engine.setScale ((int) keyParam->load(), (int) scaleParam->load());
 
     double bpm = 122.0, ppq = 0.0;
     bool playing = false;
@@ -70,16 +85,21 @@ juce::AudioProcessorEditor* PlutoProcessor::createEditor() { return new PlutoEdi
 
 void PlutoProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
-    juce::XmlElement xml ("PLUTO");
-    xml.setAttribute ("seed", juce::String::toHexString ((int) seed.load()));
-    copyXmlToBinary (xml, dest);
+    auto state = apvts.copyState();
+    state.setProperty ("seed", juce::String::toHexString ((int) seed.load()), nullptr);
+    if (auto xml = state.createXml())
+        copyXmlToBinary (*xml, dest);
 }
 
 void PlutoProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
-        if (xml->hasTagName ("PLUTO") && xml->hasAttribute ("seed"))
-            setSeed ((juce::uint32) xml->getStringAttribute ("seed").getHexValue32());
+        if (xml->hasTagName ("PLUTO"))
+        {
+            apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            if (xml->hasAttribute ("seed"))
+                setSeed ((juce::uint32) xml->getStringAttribute ("seed").getHexValue32());
+        }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new PlutoProcessor(); }

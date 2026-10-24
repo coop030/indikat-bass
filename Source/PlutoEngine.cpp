@@ -4,9 +4,17 @@ namespace
 {
     float decayCoeff (float seconds, double sr) { return std::exp (-1.0f / (seconds * (float) sr)); }
 
-    // Hohe Töne aus A-Moll-Pentatonik, damit Blips nicht gegen den Track arbeiten
-    constexpr float blipNotes[] = { 1318.51f, 1567.98f, 1760.0f, 2093.0f, 2349.32f, 2637.02f, 3135.96f };
-    constexpr float pingNotes[] = { 440.0f, 523.25f, 587.33f, 659.25f, 783.99f, 880.0f };
+    struct Scale { const char* name; int size; int steps[7]; };
+    constexpr Scale scales[PlutoEngine::numScales] = {
+        { "MINOR",      7, { 0, 2, 3, 5, 7, 8, 10 } },
+        { "MAJOR",      7, { 0, 2, 4, 5, 7, 9, 11 } },
+        { "DORIAN",     7, { 0, 2, 3, 5, 7, 9, 10 } },
+        { "PHRYGIAN",   7, { 0, 1, 3, 5, 7, 8, 10 } },
+        { "MIN PENTA",  5, { 0, 3, 5, 7, 10 } },
+        { "MAJ PENTA",  5, { 0, 2, 4, 7, 9 } },
+        { "HARM MINOR", 7, { 0, 2, 3, 5, 7, 8, 11 } },
+        { "BLUES",      6, { 0, 3, 5, 6, 7, 10 } }
+    };
 
     // Wählt count verschiedene Indizes, gewichtet
     template <size_t N>
@@ -31,9 +39,25 @@ namespace
 
 const char* PlutoEngine::elementName (int e)
 {
-    static const char* names[] = { "VINYL", "HISS", "SOLAR WIND", "RAIN", "RUMBLE", "SHORTWAVE",
-                                   "BLIPS", "DRIPS", "PINGS", "STATIC", "GLITCH", "SWEEPS" };
+    static const char* names[] = { "VINYL", "HISS", "SOLAR WIND", "RAIN", "RUMBLE", "SHORTWAVE", "GEIGER", "CRICKETS", "BUBBLES",
+                                   "BLIPS", "DRIPS", "PINGS", "STATIC", "GLITCH", "SWEEPS", "MORSE", "DATA", "THUNDER", "SWOOSH", "CREAK" };
     return juce::isPositiveAndBelow (e, (int) numElements) ? names[e] : "";
+}
+
+const char* PlutoEngine::scaleName (int i) { return scales[juce::jlimit (0, numScales - 1, i)].name; }
+
+const char* PlutoEngine::noteName (int i)
+{
+    static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    return names[((i % 12) + 12) % 12];
+}
+
+float PlutoEngine::scaleFreq (int octaveLow, int octaveHigh)
+{
+    const auto& sc = scales[juce::jlimit (0, numScales - 1, scaleNow)];
+    const int octave = octaveLow + rng.nextInt (octaveHigh - octaveLow + 1);
+    const int midi = 12 * (octave + 1) + rootNow + sc.steps[rng.nextInt (sc.size)];
+    return 440.0f * std::pow (2.0f, (float) (midi - 69) / 12.0f);
 }
 
 PlutoEngine::Scene PlutoEngine::makeScene (juce::uint32 seed)
@@ -43,13 +67,15 @@ PlutoEngine::Scene PlutoEngine::makeScene (juce::uint32 seed)
 
     // 1–3 Flächen, Vinyl am wahrscheinlichsten
     const int numBedsChosen = 1 + (r.nextFloat() < 0.75f ? 1 : 0) + (r.nextFloat() < 0.35f ? 1 : 0);
-    const auto beds = pickDistinct<numBeds> (r, { 3.0f, 1.4f, 2.0f, 1.5f, 1.2f, 1.0f }, numBedsChosen);
+    const auto beds = pickDistinct<numBeds> (r, { 3.0f, 1.4f, 2.0f, 1.5f, 1.2f, 0.8f, 1.6f, 1.2f, 1.0f }, numBedsChosen);
     for (int i = 0; i < numBeds; ++i)
         s.bedGain[(size_t) i] = beds[(size_t) i] ? 0.55f + 0.45f * r.nextFloat() : 0.0f;
 
     // 1–3 Ereignis-Typen
     const int numEventsChosen = 1 + r.nextInt (3);
-    const auto events = pickDistinct<numEventTypes> (r, { 2.0f, 2.0f, 1.5f, 1.0f, 1.5f, 1.0f }, numEventsChosen);
+    // tonale Elemente (Blips, Pings, Morse) etwas seltener als Geräusche
+    const auto events = pickDistinct<numEventTypes> (r, { 1.2f, 1.6f, 1.0f, 1.3f, 1.5f, 0.8f, 1.0f, 1.4f, 1.0f, 1.2f, 1.3f },
+                                                     numEventsChosen);
     for (int i = 0; i < numEventTypes; ++i)
         s.eventWeight[(size_t) i] = events[(size_t) i] ? 0.4f + 0.6f * r.nextFloat() : 0.0f;
     s.eventDensity = 0.02f + 0.07f * std::pow (r.nextFloat(), 1.4f);
@@ -58,8 +84,10 @@ PlutoEngine::Scene PlutoEngine::makeScene (juce::uint32 seed)
     s.rainRate = 18.0f + 70.0f * r.nextFloat();
     s.windCentre = 0.6f + r.nextFloat();
     s.rumbleFreq = 70.0f + 90.0f * r.nextFloat();
-    s.shortwaveBase = 500.0f * std::pow (2.0f, r.nextFloat() * 2.0f);
-    s.blipRegister = r.nextFloat() < 0.3f ? 0.5f : 1.0f;
+    s.geigerRate = 3.0f + 22.0f * r.nextFloat();
+    s.cricketFreq = 3800.0f + 1800.0f * r.nextFloat();
+    s.bubbleRate = 1.5f + 6.0f * r.nextFloat();
+    s.blipOctave = r.nextFloat() < 0.3f ? 5 : 6;
 
     constexpr int delayPairs[][2] = { { 3, 4 }, { 3, 6 }, { 4, 6 }, { 2, 3 }, { 6, 8 }, { 3, 3 } };
     const auto& d = delayPairs[r.nextInt ((int) std::size (delayPairs))];
@@ -103,6 +131,9 @@ void PlutoEngine::prepare (double sampleRate, int maxBlockSize)
 
     crackleDecay = decayCoeff (0.00018f, sr);
     popDecay = decayCoeff (0.0016f, sr);
+    geigerHP.setLowpass (1800.0f, sr);
+    geigerDecay = decayCoeff (0.00008f, sr);
+    geigerRingDecay = decayCoeff (0.0009f, sr);
     bedSmoothing = 1.0f - decayCoeff (0.8f, sr);
 
     for (auto& v : voices)
@@ -136,6 +167,13 @@ void PlutoEngine::reset()
     }
     swNoise.reset();
     for (auto& dr : drops) dr.env = 0.0f;
+    for (auto& b : bubbles) b.env = 0.0f;
+    geigerEnv = geigerRingEnv = geigerHP.z = 0.0f;
+    for (size_t i = 0; i < crickets.size(); ++i)
+    {
+        crickets[i].pos = 0;
+        crickets[i].pan = 0.2f + 0.3f * (float) i;
+    }
     for (auto& v : voices) { v.active = false; v.bp.reset(); }
     delayBuf.clear();
     verbBuf.clear();
@@ -199,7 +237,7 @@ void PlutoEngine::triggerEvent (double samplesPerStep)
     switch (voice.type)
     {
         case Blips:
-            voice.freq = blipNotes[rng.nextInt ((int) std::size (blipNotes))] * scene.blipRegister;
+            voice.freq = scaleFreq (scene.blipOctave, scene.blipOctave + 1);
             voice.repeatLen = juce::jmax (1, step / 2);
             voice.length = (1 + rng.nextInt (3)) * voice.repeatLen;
             voice.gain = 0.045f;
@@ -208,8 +246,8 @@ void PlutoEngine::triggerEvent (double samplesPerStep)
             break;
 
         case Drips:
-            voice.freq = 850.0f + 1000.0f * rng.nextFloat();
-            voice.freqEnd = voice.freq * 2.3f;
+            voice.freq = scaleFreq (5, 5);
+            voice.freqEnd = voice.freq * 2.0f;
             voice.length = (int) (sr * 0.25);
             voice.gain = 0.09f;
             voice.sendDelay = 0.85f;
@@ -217,7 +255,7 @@ void PlutoEngine::triggerEvent (double samplesPerStep)
             break;
 
         case Pings:
-            voice.freq = pingNotes[rng.nextInt ((int) std::size (pingNotes))] * (rng.nextBool() ? 1.0f : 0.5f);
+            voice.freq = scaleFreq (3, 4);
             voice.length = (int) (sr * 1.6);
             voice.gain = 0.035f;
             voice.sendDelay = 0.4f;
@@ -231,6 +269,7 @@ void PlutoEngine::triggerEvent (double samplesPerStep)
             voice.gain = 0.11f;
             voice.sendDelay = 0.2f;
             voice.sendVerb = 0.6f;
+            voice.bp.setType (juce::dsp::StateVariableTPTFilterType::bandpass);
             voice.bp.reset();
             voice.bp.setCutoffFrequency (voice.freq);
             voice.bp.setResonance (2.0f);
@@ -245,6 +284,79 @@ void PlutoEngine::triggerEvent (double samplesPerStep)
             voice.gain = 0.05f;
             voice.sendDelay = 0.5f;
             voice.sendVerb = 0.12f;
+            break;
+
+        case Morse:
+        {
+            // Zufällige Zeichen aus Punkten (1 Einheit) und Strichen (3 Einheiten), Einheit = 1/32
+            voice.freq = scaleFreq (5, 6);
+            voice.repeatLen = juce::jmax (1, step / 2);
+            voice.pattern = 0;
+            int unit = 0;
+            const int symbols = 5 + rng.nextInt (8);
+            for (int k = 0; k < symbols && unit < 60; ++k)
+            {
+                const int on = rng.nextFloat() < 0.6f ? 1 : 3;
+                for (int u = 0; u < on && unit < 64; ++u) voice.pattern |= (juce::uint64) 1 << unit++;
+                unit += rng.nextFloat() < 0.25f ? 3 : 1;
+            }
+            voice.length = unit * voice.repeatLen;
+            voice.envS = 0.0f;
+            voice.gain = 0.02f;
+            voice.sendDelay = 0.6f;
+            voice.sendVerb = 0.25f;
+            break;
+        }
+
+        case Data:
+            voice.holdPeriod = juce::jmax (1, (int) (sr * (0.006 + 0.01 * rng.nextDouble())));
+            voice.holdCounter = 0;
+            voice.length = (int) (sr * (0.15 + 0.45 * rng.nextDouble()));
+            voice.gain = 0.018f;
+            voice.sendDelay = 0.45f;
+            voice.sendVerb = 0.15f;
+            break;
+
+        case Thunder:
+            voice.length = (int) (sr * (3.0 + 3.0 * rng.nextDouble()));
+            voice.freq = 0.3f + 0.6f * rng.nextFloat();    // Anstiegszeit in s
+            voice.gain = 0.5f;
+            voice.sendDelay = 0.0f;
+            voice.sendVerb = 0.6f;
+            voice.envS = 0.0f;
+            voice.pan = 0.3f + 0.4f * rng.nextFloat();
+            voice.bp.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
+            voice.bp.reset();
+            voice.bp.setCutoffFrequency (140.0f + 260.0f * rng.nextFloat());
+            voice.bp.setResonance (0.8f);
+            break;
+
+        case Swoosh:
+            // Rückwärts-Hallfahne, endet auf einem Schlag
+            voice.length = juce::jmax (1, step * (rng.nextBool() ? 4 : 8));
+            voice.freq = 250.0f + 200.0f * rng.nextFloat();
+            voice.freqEnd = 3000.0f + 3000.0f * rng.nextFloat();
+            voice.gain = 0.09f;
+            voice.sendDelay = 0.1f;
+            voice.sendVerb = 0.8f;
+            voice.bp.setType (juce::dsp::StateVariableTPTFilterType::bandpass);
+            voice.bp.reset();
+            voice.bp.setResonance (1.5f);
+            break;
+
+        case Creak:
+            // Rumpf-Knarzen: ruckelnde Impulse durch einen engen Resonanzfilter
+            voice.length = (int) (sr * (0.4 + 0.9 * rng.nextDouble()));
+            voice.freq = 280.0f + 600.0f * rng.nextFloat();
+            voice.freqEnd = voice.freq * (0.7f + 0.6f * rng.nextFloat());
+            voice.chop = 18.0f + 60.0f * rng.nextFloat();   // Impulse pro Sekunde
+            voice.holdCounter = 0;
+            voice.gain = 1.4f;
+            voice.sendDelay = 0.25f;
+            voice.sendVerb = 0.5f;
+            voice.bp.setType (juce::dsp::StateVariableTPTFilterType::bandpass);
+            voice.bp.reset();
+            voice.bp.setResonance (9.0f);
             break;
 
         case Sweeps:
@@ -323,6 +435,63 @@ float PlutoEngine::renderVoice (Voice& v)
             break;
         }
 
+        case Morse:
+        {
+            const int unit = juce::jmin (63, v.age / v.repeatLen);
+            const float target = ((v.pattern >> unit) & 1u) ? 1.0f : 0.0f;
+            v.envS += (target - v.envS) * (1.0f - std::exp (-1.0f / (0.0015f * (float) sr)));
+            out = sine (v.freq) * v.envS;
+            break;
+        }
+
+        case Data:
+        {
+            if (--v.holdCounter <= 0)
+            {
+                v.holdCounter = v.holdPeriod;
+                v.freq = 600.0f + 3400.0f * rng.nextFloat();
+                v.holdValue = rng.nextFloat() < 0.15f ? 0.0f : 1.0f;   // kurze Lücken
+            }
+            const float edge = juce::jmin (1.0f, t / 0.003f) * juce::jmin (1.0f, (len - t) / 0.005f);
+            out = (sine (v.freq) > 0.0f ? 1.0f : -1.0f) * v.holdValue * edge;
+            break;
+        }
+
+        case Thunder:
+        {
+            const float attack = v.freq;
+            const float env = t < attack ? t / attack : std::exp (-(t - attack) / (len * 0.3f));
+            v.envS += 0.002f * (noise() - v.envS);                       // langsames Grollen
+            const float roll = 0.5f + 0.5f * juce::jlimit (-1.0f, 1.0f, v.envS * 8.0f);
+            out = v.bp.processSample (0, noise()) * env * roll;
+            break;
+        }
+
+        case Swoosh:
+        {
+            const float k = t / len;
+            if (v.age % 16 == 0)
+                v.bp.setCutoffFrequency (juce::jmin (v.freq * std::pow (v.freqEnd / v.freq, k), (float) sr * 0.4f));
+            const float env = k * k * k * juce::jmin (1.0f, (len - t) / 0.02f);
+            out = v.bp.processSample (0, noise()) * env;
+            break;
+        }
+
+        case Creak:
+        {
+            if (v.age % 16 == 0)
+                v.bp.setCutoffFrequency (v.freq + (v.freqEnd - v.freq) * (t / len));
+            float impulse = 0.0f;
+            if (--v.holdCounter <= 0)
+            {
+                v.holdCounter = juce::jmax (1, (int) ((float) sr / v.chop * (0.6f + 0.8f * rng.nextFloat())));
+                impulse = 0.5f + 0.5f * rng.nextFloat();
+            }
+            const float env = std::sin (juce::MathConstants<float>::pi * juce::jlimit (0.0f, 1.0f, t / len));
+            out = v.bp.processSample (0, impulse) * env;
+            break;
+        }
+
         case Sweeps:
         default:
         {
@@ -362,6 +531,9 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
         display.activeMask.store (mask);
     }
 
+    rootNow = ((rootNote.load() % 12) + 12) % 12;
+    scaleNow = juce::jlimit (0, numScales - 1, scaleIndex.load());
+
     bpm = juce::jlimit (40.0, 240.0, bpm > 0.0 ? bpm : 122.0);
     const double samplesPerBeat = sr * 60.0 / bpm;
     const double samplesPerStep = samplesPerBeat / 4.0;
@@ -374,7 +546,7 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
     auto* dR = delayBuf.getWritePointer (1);
     float* out[2] = { left, right };
 
-    float rainPeak = 0.0f;
+    float rainPeak = 0.0f, geigerPeak = 0.0f, cricketPeak = 0.0f, bubblePeak = 0.0f;
 
     for (int offset = 0; offset < numSamples; )
     {
@@ -431,7 +603,8 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
                     }
                 if (rng.nextFloat() < 0.003f) windSwellTarget = 0.25f + 0.75f * rng.nextFloat();
                 if (rng.nextFloat() < 0.002f) rumbleSwellTarget = 0.3f + 0.7f * rng.nextFloat();
-                if (rng.nextFloat() < 0.002f) swTarget = scene.shortwaveBase * std::pow (2.0f, rng.nextFloat() * 1.5f - 0.5f);
+                if (rng.nextFloat() < 0.002f) swTarget = scaleFreq (4, 6);   // gleitet zwischen Tönen der Tonleiter
+                if (rng.nextFloat() < 0.0015f) geigerBurstTarget = rng.nextFloat() < 0.25f ? 4.0f + 8.0f * rng.nextFloat() : 0.4f + rng.nextFloat();
                 if (rng.nextFloat() < 0.0015f) swFadeTarget = rng.nextFloat() < 0.6f ? 1.0f : 0.0f;
                 swFreq += 0.01f * (swTarget - swFreq);
                 swNoise.setCutoffFrequency (juce::jmin (swFreq * 1.5f, (float) sr * 0.4f));
@@ -452,6 +625,7 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
             windSwell += 0.00002f * (windSwellTarget - windSwell);
             rumbleSwell += 0.00002f * (rumbleSwellTarget - rumbleSwell);
             swFade += 0.00003f * (swFadeTarget - swFade);
+            geigerBurst += 0.0001f * (geigerBurstTarget - geigerBurst);
 
             float atmo[2] {}, verbIn[2] {}, sendD[2] {};
 
@@ -556,6 +730,84 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
                 verbIn[1] += x * 0.4f;
             }
 
+            // --- Geigerzähler: Knacken mit unruhiger Rate und plötzlichen Schauern
+            if (bedLevel[Geiger] > 0.0001f)
+            {
+                if (rng.nextFloat() < scene.geigerRate * geigerBurst / (float) sr)
+                {
+                    geigerEnv = (0.18f + 0.15f * rng.nextFloat()) * bedLevel[Geiger];
+                    geigerRingEnv = geigerEnv * 0.25f;
+                    geigerPan = 0.35f + 0.3f * rng.nextFloat();
+                    geigerPeak = 1.0f;
+                }
+                geigerRingPhase += 3300.0 / sr;
+                if (geigerRingPhase >= 1.0) geigerRingPhase -= 1.0;
+                const float x = geigerHP.hp (geigerEnv * (rng.nextBool() ? 1.0f : -0.6f))
+                              + geigerRingEnv * (float) std::sin (geigerRingPhase * juce::MathConstants<double>::twoPi);
+                geigerEnv *= geigerDecay;
+                geigerRingEnv *= geigerRingDecay;
+                atmo[0] += x * std::sqrt (1.0f - geigerPan);
+                atmo[1] += x * std::sqrt (geigerPan);
+            }
+
+            // --- Grillen: kurze Zirp-Pulse, jede Grille mit eigenem Rhythmus
+            if (bedLevel[Crickets] > 0.0001f)
+                for (auto& c : crickets)
+                {
+                    if (++c.pos >= c.period)
+                    {
+                        c.pos = 0;
+                        c.period = (int) (sr * (0.45 + 0.6 * rng.nextDouble()));
+                        c.pulses = 3 + rng.nextInt (3);
+                        c.on = rng.nextFloat() < 0.75f;
+                        c.freq = scene.cricketFreq * (0.95f + 0.1f * rng.nextFloat());
+                    }
+                    const int pulseLen = (int) (sr * 0.016), gap = (int) (sr * 0.011);
+                    const int idx = c.pos / (pulseLen + gap), inPulse = c.pos % (pulseLen + gap);
+                    if (! c.on || idx >= c.pulses || inPulse >= pulseLen) continue;
+                    c.phase += c.freq / (float) sr;
+                    if (c.phase >= 1.0f) c.phase -= 1.0f;
+                    const float env = std::sin (juce::MathConstants<float>::pi * (float) inPulse / (float) pulseLen);
+                    const float x = std::sin (c.phase * juce::MathConstants<float>::twoPi) * env * 0.03f * bedLevel[Crickets];
+                    atmo[0] += x * std::sqrt (1.0f - c.pan);
+                    atmo[1] += x * std::sqrt (c.pan);
+                    verbIn[0] += x * 0.3f;
+                    verbIn[1] += x * 0.3f;
+                    cricketPeak = 1.0f;
+                }
+
+            // --- Blubbern: kurze, nach oben gleitende Blasen
+            if (bedLevel[Bubbles] > 0.0001f)
+            {
+                if (rng.nextFloat() < scene.bubbleRate / (float) sr)
+                    for (auto& b : bubbles)
+                        if (b.env < 0.0005f)
+                        {
+                            const float life = 0.02f + 0.04f * rng.nextFloat();
+                            b.phase = 0.0f;
+                            b.inc = (300.0f + 900.0f * rng.nextFloat()) / (float) sr;
+                            b.glide = std::pow (1.8f, 1.0f / (life * (float) sr));
+                            b.env = (0.02f + 0.04f * rng.nextFloat()) * bedLevel[Bubbles];
+                            b.decay = decayCoeff (life * 0.5f, sr);
+                            b.pan = 0.2f + 0.6f * rng.nextFloat();
+                            break;
+                        }
+                for (auto& b : bubbles)
+                {
+                    if (b.env < 0.0005f) continue;
+                    b.phase += b.inc;
+                    b.inc *= b.glide;
+                    if (b.phase >= 1.0f) b.phase -= 1.0f;
+                    const float x = std::sin (b.phase * juce::MathConstants<float>::twoPi) * b.env;
+                    b.env *= b.decay;
+                    atmo[0] += x * std::sqrt (1.0f - b.pan);
+                    atmo[1] += x * std::sqrt (b.pan);
+                    verbIn[0] += x * 0.3f;
+                    verbIn[1] += x * 0.3f;
+                    bubblePeak = juce::jmax (bubblePeak, b.env * 20.0f);
+                }
+            }
+
             // --- Ereignisse
             for (auto& v : voices)
             {
@@ -621,6 +873,28 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
     shown[Rain]      = juce::jmax (shown[Rain], bedLevel[Rain] * 0.4f + juce::jmin (0.6f, rainPeak * 8.0f));
     shown[Rumble]    = bedLevel[Rumble] * (0.3f + 0.7f * rumbleSwell);
     shown[Shortwave] = bedLevel[Shortwave] * (0.35f + 0.65f * swFade);
+    shown[Geiger]    = juce::jmax (shown[Geiger], bedLevel[Geiger] * (0.3f + 0.7f * geigerPeak));
+    shown[Crickets]  = juce::jmax (shown[Crickets], bedLevel[Crickets] * (0.3f + 0.7f * cricketPeak));
+    shown[Bubbles]   = juce::jmax (shown[Bubbles], bedLevel[Bubbles] * (0.3f + 0.7f * juce::jmin (1.0f, bubblePeak)));
     for (int i = 0; i < numElements; ++i)
         display.activity[(size_t) i].store (juce::jlimit (0.0f, 1.0f, shown[(size_t) i]));
 }
+
+#if PLUTO_TESTS
+void PlutoEngine::soloForTest (int element)
+{
+    pendingSeed.store (-1);
+    scene = makeScene (1);
+    scene.bedGain = {};
+    scene.eventWeight = {};
+    scene.eventDensity = 0.0f;
+    if (element < numBeds)
+        scene.bedGain[(size_t) element] = 1.0f;
+    else
+    {
+        scene.eventWeight[(size_t) (element - numBeds)] = 1.0f;
+        scene.eventDensity = 0.1f;
+    }
+    bedLevel = scene.bedGain;
+}
+#endif

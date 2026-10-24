@@ -23,6 +23,27 @@ private:
     }
 };
 
+// Auswahlfelder und Menüs im Indikat-Look
+class IndikatLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    IndikatLookAndFeel();
+
+    void drawComboBox (juce::Graphics&, int w, int h, bool down, int, int, int, int, juce::ComboBox&) override;
+    juce::Font getComboBoxFont (juce::ComboBox&) override;
+    void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
+
+    void drawPopupMenuBackground (juce::Graphics&, int w, int h) override;
+    void drawPopupMenuItem (juce::Graphics&, const juce::Rectangle<int>&, bool isSeparator, bool isActive,
+                            bool isHighlighted, bool isTicked, bool hasSubMenu, const juce::String& text,
+                            const juce::String& shortcutKeyText, const juce::Drawable* icon,
+                            const juce::Colour* textColour) override;
+    juce::Font getPopupMenuFont() override;
+
+private:
+    juce::SharedResourcePointer<IndikatFonts> fonts;
+};
+
 // Der Planet ist der einzige Bedienknopf: Klick = neue Zufallsszene
 class PlanetButton : public juce::Component
 {
@@ -50,12 +71,13 @@ class IndikatPanel : public juce::Component, private juce::Timer
 {
 public:
     explicit IndikatPanel (PlutoProcessor&);
+    ~IndikatPanel() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
 
     static int baseWidth()  { return 560; }
-    static int baseHeight() { return 700; }
+    static int baseHeight() { return 760; }
 
 private:
     struct Spark
@@ -71,9 +93,12 @@ private:
     void timerCallback() override;
 
     PlutoProcessor& proc;
+    IndikatLookAndFeel lnf;
     juce::SharedResourcePointer<IndikatFonts> fonts;
 
     PlanetButton planet;
+    juce::ComboBox keyBox, scaleBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAtt, scaleAtt;
 
     juce::Image background;
     std::unique_ptr<juce::Drawable> logo;

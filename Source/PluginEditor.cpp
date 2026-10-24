@@ -143,6 +143,72 @@ IndikatFonts::IndikatFonts()
 }
 
 //==============================================================================
+IndikatLookAndFeel::IndikatLookAndFeel()
+{
+    setColour (juce::ComboBox::textColourId, Palette::text);
+    setColour (juce::PopupMenu::backgroundColourId, Palette::space1);
+    setColour (juce::PopupMenu::textColourId, Palette::text);
+}
+
+void IndikatLookAndFeel::drawComboBox (juce::Graphics& g, int w, int h, bool, int, int, int, int, juce::ComboBox& box)
+{
+    const bool hot = box.isMouseOver (true) || box.isPopupActive();
+    g.setColour (hot ? Palette::accent.withAlpha (0.7f) : Palette::hairHi);
+    g.fillRect (0.0f, (float) h - 1.0f, (float) w, 1.0f);
+
+    juce::Path chevron;
+    const float cx = (float) w - 7.0f, cy = (float) h * 0.5f;
+    chevron.startNewSubPath (cx - 3.5f, cy - 1.5f);
+    chevron.lineTo (cx, cy + 2.0f);
+    chevron.lineTo (cx + 3.5f, cy - 1.5f);
+    g.setColour (hot ? Palette::accent : Palette::dim);
+    g.strokePath (chevron, juce::PathStrokeType (1.2f));
+}
+
+juce::Font IndikatLookAndFeel::getComboBoxFont (juce::ComboBox&) { return fonts->mono (13.0f).withExtraKerningFactor (0.12f); }
+
+void IndikatLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
+{
+    label.setBounds (0, 0, box.getWidth() - 16, box.getHeight() - 1);
+    label.setFont (getComboBoxFont (box));
+    label.setBorderSize ({ 0, 2, 0, 0 });
+}
+
+void IndikatLookAndFeel::drawPopupMenuBackground (juce::Graphics& g, int w, int h)
+{
+    g.fillAll (Palette::space1);
+    g.setColour (Palette::hairHi);
+    g.drawRect (0, 0, w, h, 1);
+}
+
+void IndikatLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Rectangle<int>& area, bool isSeparator, bool,
+                                            bool isHighlighted, bool isTicked, bool, const juce::String& text,
+                                            const juce::String&, const juce::Drawable*, const juce::Colour*)
+{
+    if (isSeparator)
+    {
+        g.setColour (Palette::hair);
+        g.fillRect (area.reduced (8, 0).withHeight (1).withY (area.getCentreY()));
+        return;
+    }
+
+    auto r = area.reduced (1, 0);
+    if (isHighlighted)
+    {
+        g.setColour (Palette::accent.withAlpha (0.07f));
+        g.fillRect (r);
+    }
+    if (isTicked)
+        glowDot (g, { (float) r.getX() + 10.0f, (float) r.getCentreY() }, 2.0f, Palette::accent);
+
+    g.setColour (isHighlighted || isTicked ? Palette::accent : Palette::text);
+    g.setFont (getPopupMenuFont());
+    g.drawText (text, r.withTrimmedLeft (22), juce::Justification::centredLeft);
+}
+
+juce::Font IndikatLookAndFeel::getPopupMenuFont() { return fonts->mono (14.0f); }
+
+//==============================================================================
 PlanetButton::PlanetButton()
 {
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
@@ -180,6 +246,20 @@ IndikatPanel::IndikatPanel (PlutoProcessor& p)
     : proc (p)
 {
     setOpaque (true);
+    setLookAndFeel (&lnf);
+
+    // Tonart und Tonleiter für alle tonalen Elemente
+    auto addChoice = [this] (juce::ComboBox& box, std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>& att,
+                             const juce::String& id)
+    {
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter (id)))
+            box.addItemList (choice->choices, 1);
+        box.setJustificationType (juce::Justification::centredLeft);
+        addAndMakeVisible (box);
+        att = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, id, box);
+    };
+    addChoice (keyBox, keyAtt, "key");
+    addChoice (scaleBox, scaleAtt, "scale");
 
     if (auto svg = juce::XmlDocument::parse (juce::String::fromUTF8 (BinaryData::indikatlogo_svg, BinaryData::indikatlogo_svgSize)))
     {
@@ -201,6 +281,11 @@ IndikatPanel::IndikatPanel (PlutoProcessor& p)
 
     setSize (baseWidth(), baseHeight());
     startTimerHz (30);
+}
+
+IndikatPanel::~IndikatPanel()
+{
+    setLookAndFeel (nullptr);
 }
 
 //==============================================================================
@@ -287,7 +372,7 @@ void IndikatPanel::drawChip (juce::Graphics& g, juce::Rectangle<int> r, int e) c
     else    { g.setColour (Palette::faint); g.fillEllipse (juce::Rectangle<float> (3.0f, 3.0f).withCentre (dot)); }
 
     g.setColour (on ? Palette::text : Palette::faint);
-    g.setFont (fonts->mono (10.5f).withExtraKerningFactor (0.14f));
+    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.08f));
     g.drawText (PlutoEngine::elementName (e), rf.withTrimmedLeft (rad * 2.0f + 6.0f), juce::Justification::centredLeft);
 }
 
@@ -353,7 +438,13 @@ void IndikatPanel::paint (juce::Graphics& g)
     g.setFont (fonts->mono (12.0f).withExtraKerningFactor (0.3f));
     g.setColour (Palette::dim);
     g.drawText ("SCENE " + juce::String::toHexString ((int) shownSeed).toUpperCase().paddedLeft ('0', 8),
-                0, layerBox.getY() - 34, getWidth(), 18, juce::Justification::centred);
+                keyBox.getRight(), keyBox.getY(), scaleBox.getX() - keyBox.getRight(), keyBox.getHeight(),
+                juce::Justification::centred);
+
+    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.3f));
+    g.setColour (Palette::faint);
+    g.drawText ("KEY", keyBox.getX(), keyBox.getY() - 14, 80, 12, juce::Justification::centredLeft);
+    g.drawText ("SCALE", scaleBox.getX(), scaleBox.getY() - 14, 80, 12, juce::Justification::centredLeft);
 
     // Elemente
     auto box = layerBox.toFloat();
@@ -369,17 +460,21 @@ void IndikatPanel::paint (juce::Graphics& g)
     g.drawText ("LAYERS", layerBox.getX() + 36, layerBox.getY() + 10, 200, 18, juce::Justification::centredLeft);
 
     auto grid = layerBox.reduced (12, 0).withTrimmedTop (36).withTrimmedBottom (10);
-    const int rowH = grid.getHeight() / 3, colW = grid.getWidth() / 4;
+    constexpr int cols = 5;
+    const int rows = (PlutoEngine::numElements + cols - 1) / cols;
+    const int rowH = grid.getHeight() / rows, colW = grid.getWidth() / cols;
     for (int e = 0; e < PlutoEngine::numElements; ++e)
-        drawChip (g, { grid.getX() + (e % 4) * colW, grid.getY() + (e / 4) * rowH, colW, rowH },
+        drawChip (g, { grid.getX() + (e % cols) * colW, grid.getY() + (e / cols) * rowH, colW, rowH },
                   e);
 }
 
 void IndikatPanel::resized()
 {
-    centre = { (float) getWidth() * 0.5f, 336.0f };
+    centre = { (float) getWidth() * 0.5f, 332.0f };
     planet.setBounds (juce::Rectangle<int> (284, 284).withCentre (centre.roundToInt()));
-    layerBox = juce::Rectangle<int> (28, getHeight() - 28 - 128, getWidth() - 56, 128);
+    layerBox = juce::Rectangle<int> (28, getHeight() - 28 - 150, getWidth() - 56, 150);
+    keyBox.setBounds (34, layerBox.getY() - 40, 64, 24);
+    scaleBox.setBounds (getWidth() - 34 - 120, layerBox.getY() - 40, 120, 24);
     background = {};
 }
 

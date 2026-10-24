@@ -13,6 +13,30 @@ int main (int argc, char** argv)
     const int numScenes = argc > 2 ? juce::String (argv[2]).getIntValue() : 8;
     juce::WavAudioFormat wav;
 
+    // Jedes Element einzeln (nur Pegel, keine Dateien)
+    if (numScenes == 0)
+    {
+        for (int el = 0; el < PlutoEngine::numElements; ++el)
+        {
+            PlutoEngine e;
+            e.prepare (sr, block);
+            e.soloForTest (el);
+            juce::AudioBuffer<float> buf (2, total);
+            buf.clear();
+            double ppq = 0.0;
+            for (int pos = 0; pos < total; pos += block)
+            {
+                const int n = juce::jmin (block, total - pos);
+                e.process (buf.getWritePointer (0, pos), buf.getWritePointer (1, pos), n, 122.0, ppq, true);
+                ppq += n / (sr * 60.0 / 122.0);
+            }
+            std::printf ("%-11s peak %6.2f dBFS  rms %6.1f dBFS\n", PlutoEngine::elementName (el),
+                         juce::Decibels::gainToDecibels (buf.getMagnitude (0, total)),
+                         juce::Decibels::gainToDecibels (0.5f * (buf.getRMSLevel (0, 0, total) + buf.getRMSLevel (1, 0, total))));
+        }
+        return 0;
+    }
+
     for (int sceneIndex = 0; sceneIndex < numScenes; ++sceneIndex)
     {
         const auto seed = (juce::uint32) (0x9e3779b9u * (juce::uint32) (sceneIndex + 1));

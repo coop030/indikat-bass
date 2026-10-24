@@ -18,7 +18,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return JucePlugin_Name; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     double getTailLengthSeconds() const override { return 8.0; }
 
@@ -35,6 +35,7 @@ public:
     void randomize();
     juce::uint32 getSeed() const { return seed.load(); }
 
+    juce::AudioProcessorValueTreeState apvts;   // Tonart und Tonleiter
     PlutoEngine engine;
     std::atomic<float> bpmShown { 122.0f };
 
@@ -42,6 +43,8 @@ private:
     void setSeed (juce::uint32);
 
     std::atomic<juce::uint32> seed { 0 };
+    std::atomic<float>* keyParam = nullptr;
+    std::atomic<float>* scaleParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlutoProcessor)
 };

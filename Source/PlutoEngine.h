@@ -12,13 +12,19 @@ public:
     // Flächen (laufen durchgehend) und Ereignisse (tauchen im 16tel-Raster auf)
     enum Element
     {
-        Vinyl, Hiss, SolarWind, Rain, Rumble, Shortwave,     // Flächen
-        Blips, Drips, Pings, Static, Glitch, Sweeps,         // Ereignisse
+        Vinyl, Hiss, SolarWind, Rain, Rumble, Shortwave, Geiger, Crickets, Bubbles,           // Flächen
+        Blips, Drips, Pings, Static, Glitch, Sweeps, Morse, Data, Thunder, Swoosh, Creak,      // Ereignisse
         numElements
     };
-    static constexpr int numBeds = 6;
+    static constexpr int numBeds = 9;
     static constexpr int numEventTypes = numElements - numBeds;
     static const char* elementName (int);
+
+    // Tonart: alle tonalen Elemente (Blips, Pings, Drips, Morse, Kurzwelle) bleiben in dieser Tonleiter
+    static constexpr int numScales = 8;
+    static const char* scaleName (int);
+    static const char* noteName (int);
+    void setScale (int root, int scale) { rootNote.store (root); scaleIndex.store (scale); }
 
     void prepare (double sampleRate, int maxBlockSize);
     void reset();
@@ -28,6 +34,11 @@ public:
 
     // Addiert die Atmo auf left/right (Dry bleibt unangetastet)
     void process (float* left, float* right, int numSamples, double bpm, double ppqAtStart, bool hostPlaying);
+
+   #if PLUTO_TESTS
+    // Nur für den Render-Test: ein einzelnes Element solo und dicht
+    void soloForTest (int element);
+   #endif
 
     // Für die Anzeige (Audio-Thread schreibt, UI liest)
     struct Display
@@ -55,8 +66,9 @@ private:
         std::array<float, numBeds> bedGain {};
         std::array<float, numEventTypes> eventWeight {};
         float eventDensity = 0.0f;          // Wahrscheinlichkeit pro 16tel
-        float crackleRate = 20.0f, rainRate = 40.0f, windCentre = 1.0f, rumbleFreq = 110.0f, shortwaveBase = 900.0f;
-        float blipRegister = 1.0f;          // Oktavlage der Blips
+        float crackleRate = 20.0f, rainRate = 40.0f, windCentre = 1.0f, rumbleFreq = 110.0f;
+        float geigerRate = 8.0f, cricketFreq = 4600.0f, bubbleRate = 4.0f;
+        int blipOctave = 6;                 // Oktavlage der Blips
         int delayStepsL = 3, delayStepsR = 4;
         float feedback = 0.5f, verbSend = 0.5f, roomSize = 0.9f, tone = 9000.0f, width = 1.0f;
     };
@@ -72,15 +84,18 @@ private:
         int repeatLen = 1;
         float holdValue = 0.0f;
         int holdCounter = 0, holdPeriod = 1;
-        float bitSteps = 16.0f, chop = 30.0f;
+        float bitSteps = 16.0f, chop = 30.0f, envS = 0.0f;
+        juce::uint64 pattern = 0;           // Morse: an/aus pro Einheit
         juce::dsp::StateVariableTPTFilter<float> bp;
     };
 
-    struct Drop { float phase = 0.0f, inc = 0.0f, env = 0.0f, decay = 0.0f, pan = 0.5f; };
+    struct Drop { float phase = 0.0f, inc = 0.0f, env = 0.0f, decay = 0.0f, pan = 0.5f, glide = 1.0f; };
+    struct Cricket { float phase = 0.0f, freq = 4600.0f, pan = 0.5f; int pos = 0, period = 24000, pulses = 4; bool on = true; };
 
     static Scene makeScene (juce::uint32 seed);
     float noise() { return rng.nextFloat() * 2.0f - 1.0f; }
     float pink (int ch);
+    float scaleFreq (int octaveLow, int octaveHigh);
     void triggerEvent (double samplesPerStep);
     float renderVoice (Voice&);
     void publishEvent (int type, float pan);
@@ -89,6 +104,8 @@ private:
     juce::Random rng;
     std::atomic<juce::int64> pendingSeed { -1 };
     Scene scene;
+    std::atomic<int> rootNote { 9 }, scaleIndex { 4 };   // A, Moll-Pentatonik
+    int rootNow = 9, scaleNow = 4;
     std::array<float, numBeds> bedLevel {};
     float bedSmoothing = 0.0f;
 
@@ -105,6 +122,12 @@ private:
     double swPhase = 0.0;
     float swFreq = 900.0f, swTarget = 900.0f, swFade = 0.0f, swFadeTarget = 0.0f;
     juce::dsp::StateVariableTPTFilter<float> swNoise;
+    OnePole geigerHP;
+    float geigerEnv = 0.0f, geigerDecay = 0.0f, geigerRingEnv = 0.0f, geigerRingDecay = 0.0f, geigerPan = 0.5f;
+    float geigerBurst = 1.0f, geigerBurstTarget = 1.0f;
+    double geigerRingPhase = 0.0;
+    std::array<Cricket, 3> crickets;
+    std::array<Drop, 6> bubbles;
 
     // Ereignisse
     std::array<Voice, 10> voices;
