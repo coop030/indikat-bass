@@ -60,9 +60,18 @@ public:
     float radius() const { return (float) getWidth() * 0.5f - 22.0f; }
 
     std::function<void()> onClick;
-    double spin = 0.0;
+    double spin = -1.1;   // Start: das Herz auf der Lichtseite
 
 private:
+    // Vorberechnete Kugelgeometrie pro Pixel
+    struct SpherePixel { float u = 0, v = 0, dot = 0, dotLon = 0, dotLat = 0, limb = 0, haze = 0, edge = 0, halo = 0; };
+    static constexpr float haloScale = 1.12f;
+    void prepareSphere (int size);
+
+    std::vector<SpherePixel> sphere;
+    int sphereSize = 0;
+    juce::Image frame;
+    float frameShift = -1.0f, frameGlow = -1.0f;   // womit das Bild zuletzt gerechnet wurde
     bool pressed = false;
 };
 

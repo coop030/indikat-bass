@@ -16,9 +16,6 @@ namespace Palette
 
     // Pluto
     const juce::Colour ice     { 0xffc9b6a1 };
-    const juce::Colour dust    { 0xff9a8270 };
-    const juce::Colour tholin  { 0xff4b2f28 };   // dunkle Äquatorzone
-    const juce::Colour heart   { 0xfff2ece4 };   // Tombaugh Regio
 }
 
 namespace
@@ -50,88 +47,172 @@ namespace
         return Palette::accent;
     }
 
-    // Oberflächenflecken auf der Kugel: Breite, Länge, Winkelradius, Farbe
-    struct Feature { float lat, lon, size; juce::Colour colour; };
-
-    const std::vector<Feature>& plutoSurface()
+    //==========================================================================
+    // Plutos Oberfläche als Textur (Länge × Breite), einmal prozedural erzeugt
+    struct V3
     {
-        static const std::vector<Feature> features = []
-        {
-            std::vector<Feature> f;
-            juce::Random r (0x504c544f);   // "PLTO"
+        V3 (float x_, float y_, float z_) : x (x_), y (y_), z (z_) {}
+        float x, y, z;
+        float operator* (const V3& o) const { return x * o.x + y * o.y + z * o.z; }   // Skalarprodukt
+        V3 normalised() const { const float l = std::sqrt (x * x + y * y + z * z); return { x / l, y / l, z / l }; }
+    };
 
-            for (int i = 0; i < 70; ++i)   // Marmorierung
-                f.push_back ({ std::asin (r.nextFloat() * 1.9f - 0.95f), r.nextFloat() * juce::MathConstants<float>::twoPi,
-                               0.08f + 0.22f * r.nextFloat(),
-                               (r.nextBool() ? Palette::dust : Palette::ice.brighter (0.1f)).withAlpha (0.25f + 0.3f * r.nextFloat()) });
-
-            for (int i = 0; i < 46; ++i)   // dunkler Gürtel westlich des Herzens
-                f.push_back ({ -0.25f + 0.4f * r.nextFloat(), -2.7f + 2.0f * r.nextFloat(), 0.12f + 0.16f * r.nextFloat(),
-                               Palette::tholin.withAlpha (0.55f + 0.35f * r.nextFloat()) });
-
-            for (float y = -1.1f; y <= 1.3f; y += 0.16f)   // das Herz
-                for (float x = -1.3f; x <= 1.3f; x += 0.16f)
-                {
-                    const float a = x * x + y * y - 1.0f;
-                    if (a * a * a - x * x * y * y * y <= 0.0f)
-                        f.push_back ({ 0.18f + y * 0.42f, 0.35f + x * 0.5f, 0.11f + 0.04f * r.nextFloat(),
-                                       Palette::heart.withAlpha (0.55f + 0.3f * r.nextFloat()) });
-                }
-
-            for (int i = 0; i < 18; ++i)   // Krater
-                f.push_back ({ std::asin (r.nextFloat() * 1.8f - 0.9f), r.nextFloat() * juce::MathConstants<float>::twoPi,
-                               0.03f + 0.05f * r.nextFloat(), juce::Colours::black.withAlpha (0.25f) });
-            return f;
-        }();
-        return features;
+    float hash3 (int x, int y, int z)
+    {
+        auto h = (juce::uint32) x * 374761393u + (juce::uint32) y * 668265263u + (juce::uint32) z * 1274126177u;
+        h = (h ^ (h >> 13)) * 1274126177u;
+        return (float) ((h ^ (h >> 16)) & 0xffffff) / 16777216.0f;
     }
 
-    void drawPluto (juce::Graphics& g, juce::Point<float> c, float R, double spin, float glow)
+    float valueNoise (float x, float y, float z)
     {
-        const auto disc = juce::Rectangle<float> (R * 2.0f, R * 2.0f).withCentre (c);
+        const int xi = (int) std::floor (x), yi = (int) std::floor (y), zi = (int) std::floor (z);
+        auto fade = [] (float t) { return t * t * (3.0f - 2.0f * t); };
+        const float fx = fade (x - (float) xi), fy = fade (y - (float) yi), fz = fade (z - (float) zi);
+        auto lerp = [] (float a, float b, float t) { return a + (b - a) * t; };
+        const float x00 = lerp (hash3 (xi, yi, zi),         hash3 (xi + 1, yi, zi),         fx);
+        const float x10 = lerp (hash3 (xi, yi + 1, zi),     hash3 (xi + 1, yi + 1, zi),     fx);
+        const float x01 = lerp (hash3 (xi, yi, zi + 1),     hash3 (xi + 1, yi, zi + 1),     fx);
+        const float x11 = lerp (hash3 (xi, yi + 1, zi + 1), hash3 (xi + 1, yi + 1, zi + 1), fx);
+        return lerp (lerp (x00, x10, fy), lerp (x01, x11, fy), fz);
+    }
 
-        // Blauer Dunst der dünnen Atmosphäre
-        for (int i = 3; i >= 1; --i)
+    float fbm (V3 p, float freq, int octaves, float offset = 0.0f)
+    {
+        float sum = 0.0f, amp = 0.5f, norm = 0.0f;
+        for (int o = 0; o < octaves; ++o)
         {
-            g.setColour (Palette::accent.withAlpha ((0.012f + 0.04f * glow) * (float) (4 - i)));
-            g.fillEllipse (disc.expanded (R * 0.05f * (float) i));
+            sum += amp * valueNoise (p.x * freq + offset, p.y * freq - offset, p.z * freq + 2.0f * offset);
+            norm += amp;
+            amp *= 0.5f;
+            freq *= 2.03f;
         }
+        return sum / norm;
+    }
 
-        juce::ColourGradient body (Palette::ice.brighter (0.2f), c.x - R * 0.5f, c.y - R * 0.55f,
-                                   Palette::dust.darker (0.6f), c.x + R * 0.8f, c.y + R * 0.8f, true);
-        g.setGradientFill (body);
-        g.fillEllipse (disc);
+    float wrapAngle (float a)
+    {
+        while (a > juce::MathConstants<float>::pi)  a -= juce::MathConstants<float>::twoPi;
+        while (a < -juce::MathConstants<float>::pi) a += juce::MathConstants<float>::twoPi;
+        return a;
+    }
 
+    float smooth (float e0, float e1, float x)
+    {
+        const float t = juce::jlimit (0.0f, 1.0f, (x - e0) / (e1 - e0));
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    struct Rgb { float r, g, b; };
+    Rgb mix (Rgb a, Rgb b, float t) { return { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; }
+    Rgb rgb (juce::Colour c) { return { c.getFloatRed(), c.getFloatGreen(), c.getFloatBlue() }; }
+
+    struct PlutoTexture
+    {
+        static constexpr int W = 768, H = 384;
+        std::vector<Rgb> albedo;
+        std::vector<float> gLon, gLat;   // Relief: Steigung in Längen- und Breitenrichtung
+
+        PlutoTexture()
         {
-            juce::Graphics::ScopedSaveState state (g);
-            juce::Path clip;
-            clip.addEllipse (disc);
-            g.reduceClipRegion (clip);
+            albedo.resize ((size_t) (W * H));
+            std::vector<float> height ((size_t) (W * H));
 
-            for (auto& f : plutoSurface())
+            const Rgb tan     = rgb (juce::Colour (0xffb5977c));
+            const Rgb beige   = rgb (juce::Colour (0xffe2cfb7));
+            const Rgb pole    = rgb (juce::Colour (0xff8e8379));
+            const Rgb tholin  = rgb (juce::Colour (0xff3b2420));
+            const Rgb tholin2 = rgb (juce::Colour (0xff6a4031));
+            const Rgb sputnik = rgb (juce::Colour (0xffe8e2d9));
+            const Rgb heartE  = rgb (juce::Colour (0xffd9ccbb));
+
+            // Krater (fester Zufall)
+            struct Crater { V3 c; float r; };
+            std::vector<Crater> craters;
+            juce::Random cr (0x504c544f);
+            for (int i = 0; i < 45; ++i)
             {
-                const float lon = f.lon + (float) spin;
-                const float depth = std::cos (lon) * std::cos (f.lat);
-                if (depth <= 0.0f)
-                    continue;
-                const auto p = juce::Point<float> (c.x + R * std::sin (lon) * std::cos (f.lat), c.y - R * std::sin (f.lat));
-                const float s = R * std::sin (f.size);
-                g.setColour (f.colour.withMultipliedAlpha (juce::jmin (1.0f, depth * 2.5f)));
-                g.fillEllipse (juce::Rectangle<float> (s * 2.0f * std::cos (lon), s * 2.0f * std::cos (f.lat)).withCentre (p));
+                const float lat = std::asin (cr.nextFloat() * 1.9f - 0.95f), lon = cr.nextFloat() * juce::MathConstants<float>::twoPi;
+                craters.push_back ({ { std::cos (lat) * std::sin (lon), std::sin (lat), std::cos (lat) * std::cos (lon) },
+                                     0.012f + 0.06f * std::pow (cr.nextFloat(), 2.0f) });
             }
 
-            // Nachtseite
-            juce::ColourGradient night (juce::Colours::transparentBlack, c.x - R * 0.25f, c.y - R * 0.3f,
-                                        Palette::space0.withAlpha (0.95f), c.x + R * 0.85f, c.y + R * 0.8f, false);
-            g.setGradientFill (night);
-            g.fillEllipse (disc);
-        }
+            for (int j = 0; j < H; ++j)
+            {
+                const float lat = juce::MathConstants<float>::halfPi - ((float) j + 0.5f) / (float) H * juce::MathConstants<float>::pi;
+                for (int i = 0; i < W; ++i)
+                {
+                    const float lon = ((float) i + 0.5f) / (float) W * juce::MathConstants<float>::twoPi - juce::MathConstants<float>::pi;
+                    const V3 p (std::cos (lat) * std::sin (lon), std::sin (lat), std::cos (lat) * std::cos (lon));
 
-        // Kaltes Randlicht auf der Tagseite
-        juce::Path rim;
-        rim.addCentredArc (c.x, c.y, R - 0.8f, R - 0.8f, 0.0f, -2.4f, 0.3f, true);
-        strokeGlow (g, rim, Palette::accent.withAlpha (0.45f + 0.4f * glow), 1.2f);
+                    const float n1 = fbm (p, 2.5f, 5), n2 = fbm (p, 9.0f, 4, 7.0f), n3 = fbm (p, 5.0f, 4, 3.0f);
+                    const float n4 = fbm (p, 14.0f, 3, 5.0f);   // ausgefranste Ränder
+                    Rgb c = mix (tan, beige, smooth (0.3f, 0.7f, n1));
+                    const float grain = 0.88f + 0.24f * n2;
+
+                    c = mix (c, pole, smooth (0.8f, 1.3f, lat) * 0.65f);   // dunklere Nordpolregion
+
+                    // Dunkler Äquatorgürtel (Cthulhu) westlich des Herzens, dazu kleinere Flecken östlich
+                    const float dl = wrapAngle (lon + 1.25f), db = lat + 0.12f;
+                    const float e1 = (dl / 1.25f) * (dl / 1.25f) + (db / 0.3f) * (db / 0.3f) + (n3 - 0.5f) * 1.8f + (n4 - 0.5f) * 0.7f;
+                    const float dl2 = wrapAngle (lon - 2.25f), db2 = lat + 0.16f;
+                    const float e2 = (dl2 / 0.5f) * (dl2 / 0.5f) + (db2 / 0.2f) * (db2 / 0.2f) + (n3 - 0.5f) * 1.8f + (n4 - 0.5f) * 0.7f;
+                    const float dark = juce::jmax (1.0f - smooth (0.55f, 1.1f, e1), 0.8f * (1.0f - smooth (0.5f, 1.05f, e2)))
+                                     * (0.7f + 0.35f * n3);
+                    c = mix (c, mix (tholin, tholin2, n2), dark);
+
+                    // Das Herz (Tombaugh Regio): links die glatte Eisebene Sputnik Planitia
+                    const float u = wrapAngle (lon - 0.42f) * std::cos (lat) / 0.55f, v = (lat + 0.02f) / 0.5f;
+                    const float a = u * u + v * v - 1.0f;
+                    const float f = a * a * a - u * u * v * v * v + (fbm (p, 6.0f, 3, 11.0f) - 0.5f) * 0.35f;
+                    const float heart = 1.0f - smooth (-0.06f, 0.08f, f);
+                    const float west = smooth (0.15f, -0.25f, u);
+                    c = mix (c, mix (heartE, sputnik, west), heart * 0.95f);
+
+                    float h = 0.55f * n2 + 0.45f * n1;
+                    h *= 1.0f - heart * west * 0.85f;   // Sputnik ist flach
+
+                    // Krater: dunkle Mulde, heller Rand (nicht in der Eisebene)
+                    float shade = 1.0f;
+                    for (auto& k : craters)
+                    {
+                        const float d = std::acos (juce::jlimit (-1.0f, 1.0f, p * k.c));
+                        if (d > k.r * 1.4f) continue;
+                        const float q = d / k.r;
+                        const float amount = 1.0f - heart * west;
+                        if (q < 1.0f) { shade *= 1.0f - 0.1f * amount * (1.0f - q * q); h -= 0.18f * amount * (1.0f - q * q); }
+                        else          { const float rim = 1.0f - (q - 1.0f) / 0.4f; shade *= 1.0f + 0.05f * amount * rim; h += 0.08f * amount * rim; }
+                    }
+
+                    const float g = grain * shade;
+                    albedo[(size_t) (j * W + i)] = { c.r * g, c.g * g, c.b * g };
+                    height[(size_t) (j * W + i)] = h;
+                }
+            }
+
+            gLon.resize (albedo.size());
+            gLat.resize (albedo.size());
+            const float dLon = juce::MathConstants<float>::twoPi / (float) W, dLat = juce::MathConstants<float>::pi / (float) H;
+            for (int j = 0; j < H; ++j)
+            {
+                const float lat = juce::MathConstants<float>::halfPi - ((float) j + 0.5f) / (float) H * juce::MathConstants<float>::pi;
+                const float cosLat = juce::jmax (0.15f, std::cos (lat));
+                for (int i = 0; i < W; ++i)
+                {
+                    const auto at = [&] (int ii, int jj) { return height[(size_t) (juce::jlimit (0, H - 1, jj) * W + ((ii + W) % W))]; };
+                    gLon[(size_t) (j * W + i)] = (at (i + 1, j) - at (i - 1, j)) / (2.0f * dLon * cosLat);
+                    gLat[(size_t) (j * W + i)] = (at (i, j - 1) - at (i, j + 1)) / (2.0f * dLat);
+                }
+            }
+        }
+    };
+
+    const PlutoTexture& plutoTexture()
+    {
+        static const PlutoTexture texture;
+        return texture;
     }
+
 }
 
 //==============================================================================
@@ -235,10 +316,153 @@ void PlanetButton::mouseUp (const juce::MouseEvent& e)
         onClick();
 }
 
+void PlanetButton::prepareSphere (int size)
+{
+    // Pro Pixel: Texturkoordinate (vor der Drehung) und feste Lichtanteile.
+    // Die Drehung um die Polachse verschiebt danach nur noch die Länge.
+    sphereSize = size;
+    sphere.assign ((size_t) (size * size), {});
+    plutoTexture();   // Textur schon hier erzeugen, nicht erst beim ersten Zeichnen
+
+    const float tilt = 0.32f;
+    const float ct = std::cos (tilt), st = std::sin (tilt);
+    V3 light (-0.55f, 0.45f, 0.70f);
+    light = light.normalised();
+    const V3 L1 (light.x, light.y * ct - light.z * st, light.y * st + light.z * ct);
+    const float discR = (float) size / (2.0f * haloScale);
+
+    for (int py = 0; py < size; ++py)
+        for (int px = 0; px < size; ++px)
+        {
+            auto& sp = sphere[(size_t) (py * size + px)];
+            const float x = ((float) px + 0.5f - (float) size * 0.5f) / discR;
+            const float y = ((float) size * 0.5f - (float) py - 0.5f) / discR;
+            const float r = std::sqrt (x * x + y * y);
+
+            // Dunstschleier außerhalb der Scheibe, auf der Lichtseite heller
+            if (r > 0.985f && r < haloScale)
+            {
+                const float light2D = juce::jlimit (0.0f, 1.0f, 0.5f + 0.5f * (x * light.x + y * light.y) / juce::jmax (0.001f, r)
+                                                                    / std::sqrt (light.x * light.x + light.y * light.y));
+                const float t = juce::jlimit (0.0f, 1.0f, (r - 1.0f) / (haloScale - 1.0f));
+                sp.halo = std::pow (1.0f - t, 2.6f) * (0.12f + 0.55f * light2D);
+            }
+            if (r >= 1.0f + 1.5f / discR)
+                continue;
+
+            const float z = std::sqrt (juce::jmax (0.0f, 1.0f - juce::jmin (1.0f, r * r)));
+            const V3 n (x, y * ct - z * st, y * st + z * ct);   // Achse leicht geneigt
+            const float lon = std::atan2 (n.x, n.z), lat = std::asin (juce::jlimit (-1.0f, 1.0f, n.y));
+            const V3 eLon (std::cos (lon), 0.0f, -std::sin (lon));
+            const V3 eLat (-std::sin (lon) * std::sin (lat), std::cos (lat), -std::cos (lon) * std::sin (lat));
+
+            sp.u = (lon + juce::MathConstants<float>::pi) / juce::MathConstants<float>::twoPi * (float) PlutoTexture::W;
+            sp.v = juce::jlimit (0.0f, (float) PlutoTexture::H - 1.001f,
+                                 (juce::MathConstants<float>::halfPi - lat) / juce::MathConstants<float>::pi * (float) PlutoTexture::H - 0.5f);
+            sp.dot = n * L1;
+            sp.dotLon = eLon * L1;
+            sp.dotLat = eLat * L1;
+            sp.limb = 0.55f + 0.45f * std::sqrt (z);                                            // Randverdunkelung
+            sp.haze = std::pow (1.0f - z, 3.0f) * juce::jlimit (0.0f, 1.0f, sp.dot + 0.3f);      // blauer Dunst am Rand
+            sp.edge = juce::jlimit (0.0f, 1.0f, (1.0f - r) * discR + 0.5f);
+        }
+}
+
 void PlanetButton::paint (juce::Graphics& g)
 {
     const float glow = pressed ? 1.0f : (isMouseOver() ? 0.6f : 0.0f);
-    drawPluto (g, getLocalBounds().toFloat().getCentre(), radius() * (pressed ? 0.97f : 1.0f), spin, glow);
+    const float R = radius() * (pressed ? 0.97f : 1.0f);
+
+    // In 1,5-facher Auflösung rendern, damit es auch bei vergrößertem Fenster scharf bleibt
+    const int size = (int) std::ceil (radius() * haloScale * 2.0f * 1.5f);
+    if (size != sphereSize)
+    {
+        prepareSphere (size);
+        frame = juce::Image (juce::Image::ARGB, size, size, true);
+        frameShift = -1.0f;
+    }
+
+    const auto& tex = plutoTexture();
+    const float shift = (float) (std::fmod (spin, juce::MathConstants<double>::twoPi) / juce::MathConstants<double>::twoPi) * (float) PlutoTexture::W;
+
+    // Nur neu rechnen, wenn sich die Drehung um mindestens einen Texturpunkt geändert hat
+    float moved = std::abs (shift - frameShift);
+    moved = juce::jmin (moved, (float) PlutoTexture::W - moved);
+    if (frameShift >= 0.0f && moved < 1.0f && std::abs (glow - frameGlow) < 0.001f)
+    {
+        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+        g.drawImage (frame, juce::Rectangle<float> (R * haloScale * 2.0f, R * haloScale * 2.0f).withCentre (getLocalBounds().toFloat().getCentre()));
+        return;
+    }
+    frameShift = shift;
+    frameGlow = glow;
+    const Rgb haze = rgb (juce::Colour (0xff9fdcff));
+    const float bump = 0.035f;
+
+    {
+        juce::Image::BitmapData bd (frame, juce::Image::BitmapData::writeOnly);
+        for (int py = 0; py < size; ++py)
+        {
+            auto* line = bd.getLinePointer (py);
+            for (int px = 0; px < size; ++px)
+            {
+                const auto& sp = sphere[(size_t) (py * size + px)];
+                float cr = 0.0f, cg = 0.0f, cb = 0.0f, alpha = 0.0f;
+
+                if (sp.edge > 0.0f)
+                {
+                    // Textur bilinear abtasten (Länge läuft rundherum)
+                    float u = sp.u - shift;
+                    u -= std::floor (u / (float) PlutoTexture::W) * (float) PlutoTexture::W;
+                    const int i0 = (int) u % PlutoTexture::W, i1 = (i0 + 1) % PlutoTexture::W, j0 = (int) sp.v, j1 = j0 + 1;
+                    const float fu = u - std::floor (u), fv = sp.v - (float) j0;
+                    const auto idx = [] (int i, int j) { return (size_t) (j * PlutoTexture::W + i); };
+                    const float w00 = (1 - fu) * (1 - fv), w10 = fu * (1 - fv), w01 = (1 - fu) * fv, w11 = fu * fv;
+                    const auto& a00 = tex.albedo[idx (i0, j0)]; const auto& a10 = tex.albedo[idx (i1, j0)];
+                    const auto& a01 = tex.albedo[idx (i0, j1)]; const auto& a11 = tex.albedo[idx (i1, j1)];
+                    const float ar = a00.r * w00 + a10.r * w10 + a01.r * w01 + a11.r * w11;
+                    const float ag = a00.g * w00 + a10.g * w10 + a01.g * w01 + a11.g * w11;
+                    const float ab = a00.b * w00 + a10.b * w10 + a01.b * w01 + a11.b * w11;
+                    const float gl = tex.gLon[idx (i0, j0)] * w00 + tex.gLon[idx (i1, j0)] * w10 + tex.gLon[idx (i0, j1)] * w01 + tex.gLon[idx (i1, j1)] * w11;
+                    const float gt = tex.gLat[idx (i0, j0)] * w00 + tex.gLat[idx (i1, j0)] * w10 + tex.gLat[idx (i0, j1)] * w01 + tex.gLat[idx (i1, j1)] * w11;
+
+                    // Licht: weiche Schattengrenze, Relief, Randverdunkelung
+                    const float d = sp.dot - bump * (gl * sp.dotLon + gt * sp.dotLat);
+                    const float lc = juce::jlimit (0.0f, 1.0f, (d + 0.06f) / 1.06f);
+                    const float lit = lc * (0.85f + 0.15f * lc);
+                    const float k = (0.03f + 1.08f * lit) * sp.limb * (1.0f + 0.12f * glow);
+                    const float hz = sp.haze * (0.55f + 0.3f * glow);
+
+                    cr = ar * k + haze.r * hz;
+                    cg = ag * k + haze.g * hz;
+                    cb = ab * k + haze.b * hz;
+                    alpha = sp.edge;
+                }
+
+                if (sp.halo > 0.0f)
+                {
+                    const float a = sp.halo * (0.6f + 0.6f * glow);
+                    const float add = a * (1.0f - alpha);
+                    cr = cr * alpha + haze.r * add;
+                    cg = cg * alpha + haze.g * add;
+                    cb = cb * alpha + haze.b * add;
+                    alpha += add;
+                }
+                else
+                {
+                    cr *= alpha; cg *= alpha; cb *= alpha;
+                }
+
+                auto* pix = (juce::PixelARGB*) (line + px * bd.pixelStride);
+                const auto to8 = [] (float v) { return (juce::uint8) juce::jlimit (0, 255, (int) (v * 255.0f + 0.5f)); };
+                pix->setARGB (to8 (alpha), to8 (juce::jmin (cr, alpha)), to8 (juce::jmin (cg, alpha)), to8 (juce::jmin (cb, alpha)));
+            }
+        }
+    }
+
+    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+    const auto c = getLocalBounds().toFloat().getCentre();
+    g.drawImage (frame, juce::Rectangle<float> (R * haloScale * 2.0f, R * haloScale * 2.0f).withCentre (c));
 }
 
 //==============================================================================
