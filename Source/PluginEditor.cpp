@@ -11,20 +11,16 @@ namespace Palette
     const juce::Colour dim     { 0xff66738a };
     const juce::Colour faint   { 0xff38455a };
     const juce::Colour accent  { 0xff7fe6ff };   // Eis-Cyan
-    const juce::Colour counter { 0xffa292ff };   // Glitch-Violett
-    const juce::Colour star    { 0xffe8eef8 };
-
-    // Pluto
-    const juce::Colour ice     { 0xffc9b6a1 };
+    const juce::Colour counter { 0xffa292ff };   // negativer Wert bei bipolaren Reglern
 }
 
 namespace
 {
     void strokeGlow (juce::Graphics& g, const juce::Path& p, juce::Colour c, float width)
     {
-        g.setColour (c.withAlpha (c.getFloatAlpha() * 0.06f));
+        g.setColour (c.withAlpha (0.06f));
         g.strokePath (p, juce::PathStrokeType (width * 5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour (c.withAlpha (c.getFloatAlpha() * 0.14f));
+        g.setColour (c.withAlpha (0.14f));
         g.strokePath (p, juce::PathStrokeType (width * 2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         g.setColour (c);
         g.strokePath (p, juce::PathStrokeType (width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
@@ -39,180 +35,6 @@ namespace
         g.setColour (col);
         g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (c));
     }
-
-    juce::Colour elementColour (int e)
-    {
-        if (e == PlutoEngine::Glitch) return Palette::counter;
-        if (e >= PlutoEngine::numBeds) return Palette::star;
-        return Palette::accent;
-    }
-
-    //==========================================================================
-    // Plutos Oberfläche als Textur (Länge × Breite), einmal prozedural erzeugt
-    struct V3
-    {
-        V3 (float x_, float y_, float z_) : x (x_), y (y_), z (z_) {}
-        float x, y, z;
-        float operator* (const V3& o) const { return x * o.x + y * o.y + z * o.z; }   // Skalarprodukt
-        V3 normalised() const { const float l = std::sqrt (x * x + y * y + z * z); return { x / l, y / l, z / l }; }
-    };
-
-    float hash3 (int x, int y, int z)
-    {
-        auto h = (juce::uint32) x * 374761393u + (juce::uint32) y * 668265263u + (juce::uint32) z * 1274126177u;
-        h = (h ^ (h >> 13)) * 1274126177u;
-        return (float) ((h ^ (h >> 16)) & 0xffffff) / 16777216.0f;
-    }
-
-    float valueNoise (float x, float y, float z)
-    {
-        const int xi = (int) std::floor (x), yi = (int) std::floor (y), zi = (int) std::floor (z);
-        auto fade = [] (float t) { return t * t * (3.0f - 2.0f * t); };
-        const float fx = fade (x - (float) xi), fy = fade (y - (float) yi), fz = fade (z - (float) zi);
-        auto lerp = [] (float a, float b, float t) { return a + (b - a) * t; };
-        const float x00 = lerp (hash3 (xi, yi, zi),         hash3 (xi + 1, yi, zi),         fx);
-        const float x10 = lerp (hash3 (xi, yi + 1, zi),     hash3 (xi + 1, yi + 1, zi),     fx);
-        const float x01 = lerp (hash3 (xi, yi, zi + 1),     hash3 (xi + 1, yi, zi + 1),     fx);
-        const float x11 = lerp (hash3 (xi, yi + 1, zi + 1), hash3 (xi + 1, yi + 1, zi + 1), fx);
-        return lerp (lerp (x00, x10, fy), lerp (x01, x11, fy), fz);
-    }
-
-    float fbm (V3 p, float freq, int octaves, float offset = 0.0f)
-    {
-        float sum = 0.0f, amp = 0.5f, norm = 0.0f;
-        for (int o = 0; o < octaves; ++o)
-        {
-            sum += amp * valueNoise (p.x * freq + offset, p.y * freq - offset, p.z * freq + 2.0f * offset);
-            norm += amp;
-            amp *= 0.5f;
-            freq *= 2.03f;
-        }
-        return sum / norm;
-    }
-
-    float wrapAngle (float a)
-    {
-        while (a > juce::MathConstants<float>::pi)  a -= juce::MathConstants<float>::twoPi;
-        while (a < -juce::MathConstants<float>::pi) a += juce::MathConstants<float>::twoPi;
-        return a;
-    }
-
-    float smooth (float e0, float e1, float x)
-    {
-        const float t = juce::jlimit (0.0f, 1.0f, (x - e0) / (e1 - e0));
-        return t * t * (3.0f - 2.0f * t);
-    }
-
-    struct Rgb { float r, g, b; };
-    Rgb mix (Rgb a, Rgb b, float t) { return { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; }
-    Rgb rgb (juce::Colour c) { return { c.getFloatRed(), c.getFloatGreen(), c.getFloatBlue() }; }
-
-    struct PlutoTexture
-    {
-        static constexpr int W = 768, H = 384;
-        std::vector<Rgb> albedo;
-        std::vector<float> gLon, gLat;   // Relief: Steigung in Längen- und Breitenrichtung
-
-        PlutoTexture()
-        {
-            albedo.resize ((size_t) (W * H));
-            std::vector<float> height ((size_t) (W * H));
-
-            const Rgb tan     = rgb (juce::Colour (0xffb5977c));
-            const Rgb beige   = rgb (juce::Colour (0xffe2cfb7));
-            const Rgb pole    = rgb (juce::Colour (0xff8e8379));
-            const Rgb tholin  = rgb (juce::Colour (0xff3b2420));
-            const Rgb tholin2 = rgb (juce::Colour (0xff6a4031));
-            const Rgb sputnik = rgb (juce::Colour (0xffe8e2d9));
-            const Rgb heartE  = rgb (juce::Colour (0xffd9ccbb));
-
-            // Krater (fester Zufall)
-            struct Crater { V3 c; float r; };
-            std::vector<Crater> craters;
-            juce::Random cr (0x504c544f);
-            for (int i = 0; i < 45; ++i)
-            {
-                const float lat = std::asin (cr.nextFloat() * 1.9f - 0.95f), lon = cr.nextFloat() * juce::MathConstants<float>::twoPi;
-                craters.push_back ({ { std::cos (lat) * std::sin (lon), std::sin (lat), std::cos (lat) * std::cos (lon) },
-                                     0.012f + 0.06f * std::pow (cr.nextFloat(), 2.0f) });
-            }
-
-            for (int j = 0; j < H; ++j)
-            {
-                const float lat = juce::MathConstants<float>::halfPi - ((float) j + 0.5f) / (float) H * juce::MathConstants<float>::pi;
-                for (int i = 0; i < W; ++i)
-                {
-                    const float lon = ((float) i + 0.5f) / (float) W * juce::MathConstants<float>::twoPi - juce::MathConstants<float>::pi;
-                    const V3 p (std::cos (lat) * std::sin (lon), std::sin (lat), std::cos (lat) * std::cos (lon));
-
-                    const float n1 = fbm (p, 2.5f, 5), n2 = fbm (p, 9.0f, 4, 7.0f), n3 = fbm (p, 5.0f, 4, 3.0f);
-                    const float n4 = fbm (p, 14.0f, 3, 5.0f);   // ausgefranste Ränder
-                    Rgb c = mix (tan, beige, smooth (0.3f, 0.7f, n1));
-                    const float grain = 0.88f + 0.24f * n2;
-
-                    c = mix (c, pole, smooth (0.8f, 1.3f, lat) * 0.65f);   // dunklere Nordpolregion
-
-                    // Dunkler Äquatorgürtel (Cthulhu) westlich des Herzens, dazu kleinere Flecken östlich
-                    const float dl = wrapAngle (lon + 1.25f), db = lat + 0.12f;
-                    const float e1 = (dl / 1.25f) * (dl / 1.25f) + (db / 0.3f) * (db / 0.3f) + (n3 - 0.5f) * 1.8f + (n4 - 0.5f) * 0.7f;
-                    const float dl2 = wrapAngle (lon - 2.25f), db2 = lat + 0.16f;
-                    const float e2 = (dl2 / 0.5f) * (dl2 / 0.5f) + (db2 / 0.2f) * (db2 / 0.2f) + (n3 - 0.5f) * 1.8f + (n4 - 0.5f) * 0.7f;
-                    const float dark = juce::jmax (1.0f - smooth (0.55f, 1.1f, e1), 0.8f * (1.0f - smooth (0.5f, 1.05f, e2)))
-                                     * (0.7f + 0.35f * n3);
-                    c = mix (c, mix (tholin, tholin2, n2), dark);
-
-                    // Das Herz (Tombaugh Regio): links die glatte Eisebene Sputnik Planitia
-                    const float u = wrapAngle (lon - 0.42f) * std::cos (lat) / 0.55f, v = (lat + 0.02f) / 0.5f;
-                    const float a = u * u + v * v - 1.0f;
-                    const float f = a * a * a - u * u * v * v * v + (fbm (p, 6.0f, 3, 11.0f) - 0.5f) * 0.35f;
-                    const float heart = 1.0f - smooth (-0.06f, 0.08f, f);
-                    const float west = smooth (0.15f, -0.25f, u);
-                    c = mix (c, mix (heartE, sputnik, west), heart * 0.95f);
-
-                    float h = 0.55f * n2 + 0.45f * n1;
-                    h *= 1.0f - heart * west * 0.85f;   // Sputnik ist flach
-
-                    // Krater: dunkle Mulde, heller Rand (nicht in der Eisebene)
-                    float shade = 1.0f;
-                    for (auto& k : craters)
-                    {
-                        const float d = std::acos (juce::jlimit (-1.0f, 1.0f, p * k.c));
-                        if (d > k.r * 1.4f) continue;
-                        const float q = d / k.r;
-                        const float amount = 1.0f - heart * west;
-                        if (q < 1.0f) { shade *= 1.0f - 0.1f * amount * (1.0f - q * q); h -= 0.18f * amount * (1.0f - q * q); }
-                        else          { const float rim = 1.0f - (q - 1.0f) / 0.4f; shade *= 1.0f + 0.05f * amount * rim; h += 0.08f * amount * rim; }
-                    }
-
-                    const float g = grain * shade;
-                    albedo[(size_t) (j * W + i)] = { c.r * g, c.g * g, c.b * g };
-                    height[(size_t) (j * W + i)] = h;
-                }
-            }
-
-            gLon.resize (albedo.size());
-            gLat.resize (albedo.size());
-            const float dLon = juce::MathConstants<float>::twoPi / (float) W, dLat = juce::MathConstants<float>::pi / (float) H;
-            for (int j = 0; j < H; ++j)
-            {
-                const float lat = juce::MathConstants<float>::halfPi - ((float) j + 0.5f) / (float) H * juce::MathConstants<float>::pi;
-                const float cosLat = juce::jmax (0.15f, std::cos (lat));
-                for (int i = 0; i < W; ++i)
-                {
-                    const auto at = [&] (int ii, int jj) { return height[(size_t) (juce::jlimit (0, H - 1, jj) * W + ((ii + W) % W))]; };
-                    gLon[(size_t) (j * W + i)] = (at (i + 1, j) - at (i - 1, j)) / (2.0f * dLon * cosLat);
-                    gLat[(size_t) (j * W + i)] = (at (i, j - 1) - at (i, j + 1)) / (2.0f * dLat);
-                }
-            }
-        }
-    };
-
-    const PlutoTexture& plutoTexture()
-    {
-        static const PlutoTexture texture;
-        return texture;
-    }
-
 }
 
 //==============================================================================
@@ -226,9 +48,123 @@ IndikatFonts::IndikatFonts()
 //==============================================================================
 IndikatLookAndFeel::IndikatLookAndFeel()
 {
+    setColour (juce::Slider::textBoxTextColourId, Palette::text);
+    setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+    setColour (juce::Slider::textBoxHighlightColourId, Palette::accent.withAlpha (0.3f));
+    setColour (juce::Label::textColourId, Palette::dim);
+    setColour (juce::Label::textWhenEditingColourId, Palette::text);
+    setColour (juce::TextEditor::backgroundColourId, Palette::space1);
+    setColour (juce::TextEditor::outlineColourId, Palette::hairHi);
+    setColour (juce::TextEditor::focusedOutlineColourId, Palette::accent);
+    setColour (juce::CaretComponent::caretColourId, Palette::accent);
     setColour (juce::ComboBox::textColourId, Palette::text);
     setColour (juce::PopupMenu::backgroundColourId, Palette::space1);
     setColour (juce::PopupMenu::textColourId, Palette::text);
+    setColour (juce::ResizableWindow::backgroundColourId, Palette::space0);
+}
+
+void IndikatLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float pos,
+                                           float startAngle, float endAngle, juce::Slider& s)
+{
+    const float size = (float) juce::jmin (w, h);
+    const auto centre = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h).getCentre();
+    const float outer = size * 0.5f - 4.0f;
+    const float ring = outer * 0.80f;
+    const float angle = startAngle + pos * (endAngle - startAngle);
+    const bool active = s.isMouseOverOrDragging();
+
+    auto pointOn = [&] (float radius, float a) { return centre.getPointOnCircumference (radius, a); };
+
+    // Skala: feine Punkte außen
+    for (int i = 0; i <= 10; ++i)
+    {
+        const float a = startAngle + (float) i / 10.0f * (endAngle - startAngle);
+        const bool major = i == 0 || i == 5 || i == 10;
+        const float r = major ? 1.1f : 0.7f;
+        g.setColour ((i == 0 || i == 10) ? Palette::dim : Palette::faint);
+        g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (pointOn (outer, a)));
+    }
+
+    // Umlaufbahn
+    juce::Path track;
+    track.addCentredArc (centre.x, centre.y, ring, ring, 0.0f, startAngle, endAngle, true);
+    g.setColour (active ? Palette::hairHi : Palette::hair);
+    g.strokePath (track, juce::PathStrokeType (1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // Wertbogen
+    const bool bipolar = s.getMinimum() < 0.0 && s.getMaximum() > 0.0;
+    const float from = bipolar ? (startAngle + endAngle) * 0.5f : startAngle;
+    const auto colour = (bipolar && angle < from) ? Palette::counter : Palette::accent;
+
+    if (std::abs (angle - from) > 0.01f)
+    {
+        juce::Path arc;
+        arc.addCentredArc (centre.x, centre.y, ring, ring, 0.0f, juce::jmin (from, angle), juce::jmax (from, angle), true);
+        strokeGlow (g, arc, colour.withMultipliedAlpha (active ? 1.0f : 0.85f), 2.0f);
+    }
+
+    // Kern
+    const float core = ring * 0.62f;
+    g.setGradientFill (juce::ColourGradient (Palette::space1.brighter (0.15f), centre.x, centre.y - core,
+                                             Palette::space0, centre.x, centre.y + core, false));
+    g.fillEllipse (juce::Rectangle<float> (core * 2.0f, core * 2.0f).withCentre (centre));
+    g.setColour (active ? Palette::hairHi : Palette::hair);
+    g.drawEllipse (juce::Rectangle<float> (core * 2.0f, core * 2.0f).withCentre (centre), 1.0f);
+
+    // Zeiger im Kern
+    g.setColour (active ? Palette::text : Palette::dim);
+    g.drawLine (juce::Line<float> (pointOn (core * 0.35f, angle), pointOn (core * 0.8f, angle)), 1.5f);
+
+    // Satellit
+    glowDot (g, pointOn (ring, angle), active ? 3.6f : 3.0f, colour);
+}
+
+juce::Label* IndikatLookAndFeel::createSliderTextBox (juce::Slider& s)
+{
+    auto* l = LookAndFeel_V4::createSliderTextBox (s);
+    l->setFont (fonts->mono (12.5f));
+    l->setColour (juce::Label::textColourId, Palette::text);
+    l->setColour (juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    l->setColour (juce::Label::outlineColourId, juce::Colours::transparentBlack);
+    return l;
+}
+
+void IndikatLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& b, bool highlighted, bool)
+{
+    const bool on = b.getToggleState();
+    auto r = b.getLocalBounds().toFloat().reduced (1.0f);
+    const float rad = r.getHeight() * 0.5f;
+
+    g.setColour (on ? Palette::accent.withAlpha (0.08f) : juce::Colours::transparentBlack);
+    g.fillRoundedRectangle (r, rad);
+    g.setColour (on ? Palette::accent.withAlpha (0.6f) : (highlighted ? Palette::hairHi : Palette::hair));
+    g.drawRoundedRectangle (r, rad, 1.0f);
+
+    const juce::Point<float> dot (r.getX() + rad + 2.0f, r.getCentreY());
+    if (on) glowDot (g, dot, 2.2f, Palette::accent);
+    else    { g.setColour (Palette::faint); g.fillEllipse (juce::Rectangle<float> (4.0f, 4.0f).withCentre (dot)); }
+
+    g.setColour (on ? Palette::text : Palette::dim);
+    g.setFont (fonts->mono (11.0f).withExtraKerningFactor (0.12f));
+    g.drawText (b.getButtonText(), r.withTrimmedLeft (rad * 2.0f + 2.0f).withTrimmedRight (rad * 0.6f),
+                juce::Justification::centred);
+}
+
+void IndikatLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, const juce::Colour&, bool highlighted, bool down)
+{
+    if (highlighted || down)
+    {
+        g.setColour (Palette::accent.withAlpha (down ? 0.12f : 0.05f));
+        g.fillEllipse (b.getLocalBounds().toFloat().reduced (2.0f));
+    }
+}
+
+void IndikatLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, bool highlighted, bool)
+{
+    g.setColour (highlighted ? Palette::accent : Palette::dim);
+    g.setFont (fonts->mono (15.0f));
+    g.drawText (b.getButtonText(), b.getLocalBounds(), juce::Justification::centred);
 }
 
 void IndikatLookAndFeel::drawComboBox (juce::Graphics& g, int w, int h, bool, int, int, int, int, juce::ComboBox& box)
@@ -246,7 +182,7 @@ void IndikatLookAndFeel::drawComboBox (juce::Graphics& g, int w, int h, bool, in
     g.strokePath (chevron, juce::PathStrokeType (1.2f));
 }
 
-juce::Font IndikatLookAndFeel::getComboBoxFont (juce::ComboBox&) { return fonts->mono (13.0f).withExtraKerningFactor (0.12f); }
+juce::Font IndikatLookAndFeel::getComboBoxFont (juce::ComboBox&) { return fonts->mono (13.0f); }
 
 void IndikatLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& label)
 {
@@ -289,201 +225,250 @@ void IndikatLookAndFeel::drawPopupMenuItem (juce::Graphics& g, const juce::Recta
 
 juce::Font IndikatLookAndFeel::getPopupMenuFont() { return fonts->mono (14.0f); }
 
+juce::Font IndikatLookAndFeel::getLabelFont (juce::Label& l) { return l.getFont(); }
+
 //==============================================================================
-PlanetButton::PlanetButton()
+//==============================================================================
+void SpaceKeyboard::drawWhiteNote (int note, juce::Graphics& g, juce::Rectangle<float> area, bool isDown, bool isOver,
+                                   juce::Colour, juce::Colour)
 {
-    setMouseCursor (juce::MouseCursor::PointingHandCursor);
-    setTitle ("Randomize");
-    setDescription ("Neue zufällige Atmo-Szene");
-}
+    g.setGradientFill (juce::ColourGradient (Palette::space1, 0.0f, area.getY(),
+                                             Palette::space0, 0.0f, area.getBottom(), false));
+    g.fillRect (area);
 
-bool PlanetButton::hitTest (int x, int y)
-{
-    return getLocalBounds().toFloat().getCentre().getDistanceFrom ({ (float) x, (float) y }) <= radius() + 6.0f;
-}
-
-void PlanetButton::mouseDown (const juce::MouseEvent&)
-{
-    pressed = true;
-    repaint();
-}
-
-void PlanetButton::mouseUp (const juce::MouseEvent& e)
-{
-    pressed = false;
-    repaint();
-    if (hitTest (e.x, e.y) && onClick != nullptr)
-        onClick();
-}
-
-void PlanetButton::prepareSphere (int size)
-{
-    // Pro Pixel: Texturkoordinate (vor der Drehung) und feste Lichtanteile.
-    // Die Drehung um die Polachse verschiebt danach nur noch die Länge.
-    sphereSize = size;
-    sphere.assign ((size_t) (size * size), {});
-    plutoTexture();   // Textur schon hier erzeugen, nicht erst beim ersten Zeichnen
-
-    const float tilt = 0.32f;
-    const float ct = std::cos (tilt), st = std::sin (tilt);
-    V3 light (-0.55f, 0.45f, 0.70f);
-    light = light.normalised();
-    const V3 L1 (light.x, light.y * ct - light.z * st, light.y * st + light.z * ct);
-    const float discR = (float) size / (2.0f * haloScale);
-
-    for (int py = 0; py < size; ++py)
-        for (int px = 0; px < size; ++px)
-        {
-            auto& sp = sphere[(size_t) (py * size + px)];
-            const float x = ((float) px + 0.5f - (float) size * 0.5f) / discR;
-            const float y = ((float) size * 0.5f - (float) py - 0.5f) / discR;
-            const float r = std::sqrt (x * x + y * y);
-
-            // Dunstschleier außerhalb der Scheibe, auf der Lichtseite heller
-            if (r > 0.985f && r < haloScale)
-            {
-                const float light2D = juce::jlimit (0.0f, 1.0f, 0.5f + 0.5f * (x * light.x + y * light.y) / juce::jmax (0.001f, r)
-                                                                    / std::sqrt (light.x * light.x + light.y * light.y));
-                const float t = juce::jlimit (0.0f, 1.0f, (r - 1.0f) / (haloScale - 1.0f));
-                sp.halo = std::pow (1.0f - t, 2.6f) * (0.12f + 0.55f * light2D);
-            }
-            if (r >= 1.0f + 1.5f / discR)
-                continue;
-
-            const float z = std::sqrt (juce::jmax (0.0f, 1.0f - juce::jmin (1.0f, r * r)));
-            const V3 n (x, y * ct - z * st, y * st + z * ct);   // Achse leicht geneigt
-            const float lon = std::atan2 (n.x, n.z), lat = std::asin (juce::jlimit (-1.0f, 1.0f, n.y));
-            const V3 eLon (std::cos (lon), 0.0f, -std::sin (lon));
-            const V3 eLat (-std::sin (lon) * std::sin (lat), std::cos (lat), -std::cos (lon) * std::sin (lat));
-
-            sp.u = (lon + juce::MathConstants<float>::pi) / juce::MathConstants<float>::twoPi * (float) PlutoTexture::W;
-            sp.v = juce::jlimit (0.0f, (float) PlutoTexture::H - 1.001f,
-                                 (juce::MathConstants<float>::halfPi - lat) / juce::MathConstants<float>::pi * (float) PlutoTexture::H - 0.5f);
-            sp.dot = n * L1;
-            sp.dotLon = eLon * L1;
-            sp.dotLat = eLat * L1;
-            sp.limb = 0.55f + 0.45f * std::sqrt (z);                                            // Randverdunkelung
-            sp.haze = std::pow (1.0f - z, 3.0f) * juce::jlimit (0.0f, 1.0f, sp.dot + 0.3f);      // blauer Dunst am Rand
-            sp.edge = juce::jlimit (0.0f, 1.0f, (1.0f - r) * discR + 0.5f);
-        }
-}
-
-void PlanetButton::paint (juce::Graphics& g)
-{
-    const float glow = pressed ? 1.0f : (isMouseOver() ? 0.6f : 0.0f);
-    const float R = radius() * (pressed ? 0.97f : 1.0f);
-
-    // In 1,5-facher Auflösung rendern, damit es auch bei vergrößertem Fenster scharf bleibt
-    const int size = (int) std::ceil (radius() * haloScale * 2.0f * 1.5f);
-    if (size != sphereSize)
+    if (isDown || isOver)
     {
-        prepareSphere (size);
-        frame = juce::Image (juce::Image::ARGB, size, size, true);
-        frameShift = -1.0f;
+        g.setGradientFill (juce::ColourGradient (Palette::accent.withAlpha (0.0f), 0.0f, area.getY(),
+                                                 Palette::accent.withAlpha (isDown ? 0.35f : 0.08f), 0.0f, area.getBottom(), false));
+        g.fillRect (area);
     }
+    if (isDown)
+        glowDot (g, { area.getCentreX(), area.getBottom() - 9.0f }, 2.0f, Palette::accent);
 
-    const auto& tex = plutoTexture();
-    const float shift = (float) (std::fmod (spin, juce::MathConstants<double>::twoPi) / juce::MathConstants<double>::twoPi) * (float) PlutoTexture::W;
+    g.setColour (Palette::hair);
+    g.fillRect (area.getRight() - 1.0f, area.getY(), 1.0f, area.getHeight());
 
-    // Nur neu rechnen, wenn sich die Drehung um mindestens einen Texturpunkt geändert hat
-    float moved = std::abs (shift - frameShift);
-    moved = juce::jmin (moved, (float) PlutoTexture::W - moved);
-    if (frameShift >= 0.0f && moved < 1.0f && std::abs (glow - frameGlow) < 0.001f)
+    if (note % 12 == 0)
     {
-        g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-        g.drawImage (frame, juce::Rectangle<float> (R * haloScale * 2.0f, R * haloScale * 2.0f).withCentre (getLocalBounds().toFloat().getCentre()));
-        return;
+        g.setColour (Palette::faint);
+        g.setFont (juce::Font (juce::FontOptions (10.0f)));
+        g.drawText ("C" + juce::String (note / 12 - 1), area.withTrimmedBottom (4.0f).withTrimmedLeft (4.0f),
+                    juce::Justification::bottomLeft);
     }
-    frameShift = shift;
-    frameGlow = glow;
-    const Rgb haze = rgb (juce::Colour (0xff9fdcff));
-    const float bump = 0.035f;
+}
 
+void SpaceKeyboard::drawBlackNote (int, juce::Graphics& g, juce::Rectangle<float> area, bool isDown, bool isOver, juce::Colour)
+{
+    auto r = area.withTrimmedBottom (2.0f);
+    g.setColour (juce::Colour (0xff020306));
+    g.fillRect (r);
+    g.setColour (isDown ? Palette::accent.withAlpha (0.8f) : (isOver ? Palette::hairHi.brighter (0.3f) : Palette::hairHi));
+    g.drawRect (r, 1.0f);
+    if (isDown)
     {
-        juce::Image::BitmapData bd (frame, juce::Image::BitmapData::writeOnly);
-        for (int py = 0; py < size; ++py)
-        {
-            auto* line = bd.getLinePointer (py);
-            for (int px = 0; px < size; ++px)
-            {
-                const auto& sp = sphere[(size_t) (py * size + px)];
-                float cr = 0.0f, cg = 0.0f, cb = 0.0f, alpha = 0.0f;
-
-                if (sp.edge > 0.0f)
-                {
-                    // Textur bilinear abtasten (Länge läuft rundherum)
-                    float u = sp.u - shift;
-                    u -= std::floor (u / (float) PlutoTexture::W) * (float) PlutoTexture::W;
-                    const int i0 = (int) u % PlutoTexture::W, i1 = (i0 + 1) % PlutoTexture::W, j0 = (int) sp.v, j1 = j0 + 1;
-                    const float fu = u - std::floor (u), fv = sp.v - (float) j0;
-                    const auto idx = [] (int i, int j) { return (size_t) (j * PlutoTexture::W + i); };
-                    const float w00 = (1 - fu) * (1 - fv), w10 = fu * (1 - fv), w01 = (1 - fu) * fv, w11 = fu * fv;
-                    const auto& a00 = tex.albedo[idx (i0, j0)]; const auto& a10 = tex.albedo[idx (i1, j0)];
-                    const auto& a01 = tex.albedo[idx (i0, j1)]; const auto& a11 = tex.albedo[idx (i1, j1)];
-                    const float ar = a00.r * w00 + a10.r * w10 + a01.r * w01 + a11.r * w11;
-                    const float ag = a00.g * w00 + a10.g * w10 + a01.g * w01 + a11.g * w11;
-                    const float ab = a00.b * w00 + a10.b * w10 + a01.b * w01 + a11.b * w11;
-                    const float gl = tex.gLon[idx (i0, j0)] * w00 + tex.gLon[idx (i1, j0)] * w10 + tex.gLon[idx (i0, j1)] * w01 + tex.gLon[idx (i1, j1)] * w11;
-                    const float gt = tex.gLat[idx (i0, j0)] * w00 + tex.gLat[idx (i1, j0)] * w10 + tex.gLat[idx (i0, j1)] * w01 + tex.gLat[idx (i1, j1)] * w11;
-
-                    // Licht: weiche Schattengrenze, Relief, Randverdunkelung
-                    const float d = sp.dot - bump * (gl * sp.dotLon + gt * sp.dotLat);
-                    const float lc = juce::jlimit (0.0f, 1.0f, (d + 0.06f) / 1.06f);
-                    const float lit = lc * (0.85f + 0.15f * lc);
-                    const float k = (0.03f + 1.08f * lit) * sp.limb * (1.0f + 0.12f * glow);
-                    const float hz = sp.haze * (0.55f + 0.3f * glow);
-
-                    cr = ar * k + haze.r * hz;
-                    cg = ag * k + haze.g * hz;
-                    cb = ab * k + haze.b * hz;
-                    alpha = sp.edge;
-                }
-
-                if (sp.halo > 0.0f)
-                {
-                    const float a = sp.halo * (0.6f + 0.6f * glow);
-                    const float add = a * (1.0f - alpha);
-                    cr = cr * alpha + haze.r * add;
-                    cg = cg * alpha + haze.g * add;
-                    cb = cb * alpha + haze.b * add;
-                    alpha += add;
-                }
-                else
-                {
-                    cr *= alpha; cg *= alpha; cb *= alpha;
-                }
-
-                auto* pix = (juce::PixelARGB*) (line + px * bd.pixelStride);
-                const auto to8 = [] (float v) { return (juce::uint8) juce::jlimit (0, 255, (int) (v * 255.0f + 0.5f)); };
-                pix->setARGB (to8 (alpha), to8 (juce::jmin (cr, alpha)), to8 (juce::jmin (cg, alpha)), to8 (juce::jmin (cb, alpha)));
-            }
-        }
+        g.setColour (Palette::accent.withAlpha (0.25f));
+        g.fillRect (r.reduced (1.0f));
     }
-
-    g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
-    const auto c = getLocalBounds().toFloat().getCentre();
-    g.drawImage (frame, juce::Rectangle<float> (R * haloScale * 2.0f, R * haloScale * 2.0f).withCentre (c));
 }
 
 //==============================================================================
-IndikatPanel::IndikatPanel (PlutoProcessor& p)
-    : proc (p)
+namespace
 {
+    float hashNote (int m)
+    {
+        const float s = std::sin ((float) m * 12.9898f) * 43758.5453f;
+        return s - std::floor (s);
+    }
+
+    juce::String noteName (int m)
+    {
+        return juce::MidiMessage::getMidiNoteName (m, true, true, 4);
+    }
+}
+
+//==============================================================================
+StarField::StarField (StarPadProcessor& p) : proc (p)
+{
+    juce::Random r (0x57a7);
+    for (int i = 0; i < 170; ++i)
+    {
+        const bool big = r.nextFloat() > 0.9f;
+        stars.push_back ({ r.nextFloat(), r.nextFloat(), big ? 0.9f + r.nextFloat() * 0.9f : 0.35f + r.nextFloat() * 0.6f,
+                           r.nextFloat() * 6.28f, 0.4f + r.nextFloat() * 2.2f, 0.15f + r.nextFloat() * 0.6f,
+                           r.nextFloat() < 0.35f });
+    }
     setOpaque (true);
-    setLookAndFeel (&lnf);
+}
 
-    // Tonart und Tonleiter für alle tonalen Elemente
-    auto addChoice = [this] (juce::ComboBox& box, std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>& att,
-                             const juce::String& id)
+void StarField::tick()
+{
+    const float target = juce::jmin (1.0f, proc.engine.level.load() * 1.6f);
+    level += (target - level) * 0.18f;
+    time += 1.0f / 30.0f;
+
+    const float drift = 0.004f + level * 0.02f;
+    for (auto& s : stars)
     {
-        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter (id)))
-            box.addItemList (choice->choices, 1);
-        box.setJustificationType (juce::Justification::centredLeft);
-        addAndMakeVisible (box);
-        att = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, id, box);
+        s.x -= drift / 30.0f * s.r * 0.6f;
+        if (s.x < 0.0f) s.x += 1.0f;
+    }
+
+    // Neue Funken aus dem Audio-Thread
+    auto& fifo = proc.engine.sparkFifo;
+    int start1, size1, start2, size2;
+    fifo.prepareToRead (fifo.getNumReady(), start1, size1, start2, size2);
+    auto take = [this] (const StarPadEngine::Spark& sp)
+    {
+        flares.push_back ({ juce::jlimit (0.03f, 0.97f, 0.04f + 0.92f * ((sp.pitch - 60.0f) / 48.0f + rng.nextFloat() * 0.06f)),
+                            0.1f + rng.nextFloat() * 0.48f, sp.level, 1.0f, sp.violet });
     };
-    addChoice (keyBox, keyAtt, "key");
-    addChoice (scaleBox, scaleAtt, "scale");
+    for (int i = 0; i < size1; ++i) take (proc.engine.sparkBuffer[start1 + i]);
+    for (int i = 0; i < size2; ++i) take (proc.engine.sparkBuffer[start2 + i]);
+    fifo.finishedRead (size1 + size2);
+
+    for (auto& f : flares) f.life -= 0.026f;
+    flares.erase (std::remove_if (flares.begin(), flares.end(), [] (const Flare& f) { return f.life <= 0.0f; }), flares.end());
+    if (flares.size() > 60) flares.erase (flares.begin(), flares.begin() + (long) (flares.size() - 60));
+
+    held.clear();
+    const juce::uint64 m[2] { proc.engine.heldMask[0].load(), proc.engine.heldMask[1].load() };
+    for (int n = 0; n < 128; ++n)
+        if (m[n >> 6] & (1ull << (n & 63))) held.push_back (n);
+
+    repaint();
+}
+
+void StarField::paint (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    const float w = b.getWidth(), h = b.getHeight();
+
+    g.fillAll (juce::Colour (0xff020409));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff14304f).withAlpha (0.35f + level * 0.5f), w * 0.5f, h * 1.15f,
+                                             juce::Colour (0x00020409), w * 0.5f, h * 1.15f - w * 0.55f, true));
+    g.fillRect (b);
+
+    // Sterne
+    for (auto& s : stars)
+    {
+        const float a = juce::jlimit (0.0f, 1.0f, s.bright * (0.55f + 0.45f * std::sin (s.phase + time * s.speed)) * (0.45f + level * 1.6f));
+        g.setColour ((s.cool ? Palette::accent : juce::Colour (0xffd2dbe8)).withAlpha (a));
+        g.fillRect (s.x * w, s.y * h, s.r, s.r);
+    }
+
+    // Horizont: Ausgangssignal
+    if (level > 0.002f)
+    {
+        const int pos = proc.engine.scopePos.load();
+        constexpr int span = 1024;
+        juce::Path wave;
+        for (int i = 0; i < span; i += 4)
+        {
+            const float v = proc.engine.scope[(pos - span + i) & (StarPadEngine::scopeSize - 1)];
+            const float x = (float) i / (float) span * w;
+            const float y = h * 0.64f + v * h * 0.28f;
+            if (i == 0) wave.startNewSubPath (x, y); else wave.lineTo (x, y);
+        }
+        strokeGlow (g, wave, Palette::accent.withAlpha (0.15f + level * 0.5f), 1.0f);
+    }
+
+    // Sternbild des gehaltenen Akkords
+    if (! held.empty())
+    {
+        const int n = (int) held.size();
+        std::vector<juce::Point<float>> pts;
+        for (int i = 0; i < n; ++i)
+        {
+            const float fx = 0.22f + 0.56f * (n > 1 ? (float) i / (float) (n - 1) : 0.5f) + (hashNote (held[(size_t) i] + 3) - 0.5f) * 0.06f;
+            pts.push_back ({ fx * w, (0.14f + 0.36f * hashNote (held[(size_t) i])) * h });
+        }
+        juce::Path line;
+        line.startNewSubPath (pts[0]);
+        for (size_t i = 1; i < pts.size(); ++i) line.lineTo (pts[i]);
+        strokeGlow (g, line, Palette::accent.withAlpha (0.3f + level * 0.6f), 1.0f);
+        for (auto& p : pts)
+        {
+            const float len = 5.0f + level * 16.0f;
+            g.setColour (Palette::accent.withAlpha (0.5f + level * 0.5f));
+            g.fillRect (p.x - len, p.y - 0.5f, len * 2.0f, 1.0f);
+            g.fillRect (p.x - 0.5f, p.y - len, 1.0f, len * 2.0f);
+            glowDot (g, p, 2.2f, juce::Colour (0xffe9fbff));
+        }
+    }
+
+    // Funken
+    for (auto& f : flares)
+    {
+        const auto col = f.violet ? Palette::counter : Palette::accent;
+        const float x = f.x * w, y = f.y * h, len = f.size * f.life * 22.0f;
+        g.setGradientFill (juce::ColourGradient (col.withAlpha (0.7f * f.life), x, y, col.withAlpha (0.0f), x + len * 0.8f, y, true));
+        g.fillEllipse (juce::Rectangle<float> (len * 1.6f, len * 1.6f).withCentre ({ x, y }));
+        g.setColour (juce::Colour (0xfff0fcff).withAlpha (f.life));
+        g.fillRect (x - len, y - 0.5f, len * 2.0f, 1.0f);
+        g.fillRect (x - 0.5f, y - len, 1.0f, len * 2.0f);
+    }
+
+    // Beschriftung
+    auto inner = getLocalBounds().reduced (10, 6);
+    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.2f));
+    g.setColour (Palette::dim);
+    g.drawText ("STARFIELD.", inner.removeFromTop (14), juce::Justification::topLeft);
+    g.drawText (juce::String (proc.hostBpm.load(), 1) + " BPM", getLocalBounds().reduced (10, 6), juce::Justification::topRight);
+    g.setFont (fonts->mono (15.0f).withExtraKerningFactor (0.06f));
+    g.setColour (chordText == "-" ? Palette::faint : Palette::accent);
+    g.drawText (chordText, getLocalBounds().reduced (10, 6), juce::Justification::bottomLeft);
+    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.2f));
+    g.setColour (Palette::dim);
+    g.drawText ("STARS " + juce::String (juce::roundToInt (proc.apvts.getRawParameterValue ("stars")->load() * 100.0f)) + " %",
+                getLocalBounds().reduced (10, 6), juce::Justification::bottomRight);
+
+    g.setColour (Palette::hairHi);
+    g.drawRect (getLocalBounds(), 1);
+}
+
+//==============================================================================
+void ChordPad::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat().reduced (1.0f);
+    g.setColour (juce::Colour (0xff0b1422));
+    g.fillRoundedRectangle (r, 6.0f);
+
+    if (lit)
+    {
+        g.setGradientFill (juce::ColourGradient (Palette::accent.withAlpha (0.02f), r.getCentreX(), r.getY(),
+                                                 Palette::accent.withAlpha (0.18f), r.getCentreX(), r.getBottom(), false));
+        g.fillRoundedRectangle (r, 6.0f);
+        g.setColour (Palette::accent.withAlpha (0.1f));
+        g.drawRoundedRectangle (r.reduced (1.5f), 5.0f, 3.0f);
+        g.setColour (Palette::accent.withAlpha (0.75f));
+    }
+    else
+    {
+        g.setColour (isMouseOver() ? Palette::hairHi : Palette::hair);
+    }
+    g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
+
+    auto inner = getLocalBounds().reduced (12, 9);
+    g.setFont (fonts->mono (10.5f));
+    g.setColour (lit ? Palette::accent : Palette::faint);
+    g.drawText (juce::String (number), inner, juce::Justification::topLeft);
+    g.setColour (Palette::dim);
+    g.setFont (fonts->mono (10.5f).withExtraKerningFactor (0.2f));
+    g.drawText (degree, inner, juce::Justification::bottomLeft);
+
+    g.setFont (fonts->wide (14.0f).withExtraKerningFactor (0.04f));
+    g.setColour (lit ? Palette::accent : Palette::text);
+    g.drawFittedText (chord, inner.withTrimmedTop (4), juce::Justification::centredLeft, 1, 0.8f);
+    if (lit)
+        glowDot (g, { r.getRight() - 12.0f, r.getY() + 12.0f }, 2.2f, Palette::accent);
+}
+
+//==============================================================================
+IndikatPanel::IndikatPanel (StarPadProcessor& p)
+    : proc (p), starField (p)
+{
+    setLookAndFeel (&lnf);
+    setOpaque (true);
 
     if (auto svg = juce::XmlDocument::parse (juce::String::fromUTF8 (BinaryData::indikatlogo_svg, BinaryData::indikatlogo_svgSize)))
     {
@@ -492,24 +477,139 @@ IndikatPanel::IndikatPanel (PlutoProcessor& p)
             logo->replaceColour (juce::Colours::white, Palette::text);
     }
 
-    planet.onClick = [this]
-    {
-        proc.randomize();
-        clickTime = juce::Time::getMillisecondCounterHiRes() * 0.001;
-        spinBoost = 4.0f;
-    };
-    addAndMakeVisible (planet);
+    // 01 Akkorde (Pads statt Reglern)
+    addChoice (key, keyAtt, "key");
+    addChoice (chordSet, chordSetAtt, "chordSet");
+    addChoice (voicing, voicingAtt, "voicing");
+    addAndMakeVisible (chordOn);
+    chordOnAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "chordOn", chordOn);
+    addAndMakeVisible (hold);
+    hold.onClick = [this] { if (! hold.getToggleState()) proc.padRequest.store (-1); };
+    addSection ("CHORDS", {}, { { &hold, 74 }, { &chordOn, 116 }, { &voicing, 74 }, { &chordSet, 82 }, { &key, 92 } });
 
-    lastEventCount = proc.engine.display.eventCount.load();
-    lastTick = juce::Time::getMillisecondCounterHiRes() * 0.001;
+    for (int i = 0; i < StarPadEngine::numPads; ++i)
+    {
+        pads[i].number = i + 1;
+        pads[i].onPress = [this, i] { padPressed (i); };
+        pads[i].onRelease = [this, i] { padReleased (i); };
+        addAndMakeVisible (pads[i]);
+    }
+
+    addChoice (wave, waveAtt, "wave");
+    addSection ("SOUND", { &addKnob ("voices", "VOICES"), &addKnob ("detune", "DETUNE"), &addKnob ("octave", "OCTAVE"),
+                           &addKnob ("sub", "SUB") },
+                { { &wave, 96 } });
+
+    addChoice (pulse, pulseAtt, "pulse");
+    addSection ("ENVELOPE", { &addKnob ("attack", "ATTACK"), &addKnob ("release", "RELEASE"), &addKnob ("gate", "STAB") },
+                { { &pulse, 108 } });
+
+    addChoice (lfoRate, lfoRateAtt, "lfoRate");
+    addSection ("FILTER", { &addKnob ("cutoff", "CUTOFF"), &addKnob ("reso", "RESO"), &addKnob ("lfoDepth", "LFO") },
+                { { &lfoRate, 88 } });
+
+    addChoice (delayDiv, delayDivAtt, "delayDiv");
+    addSection ("SPACE", { &addKnob ("chorus", "CHORUS"), &addKnob ("feedback", "FEEDBACK"), &addKnob ("delayMix", "ECHO"),
+                           &addKnob ("revSize", "SIZE"), &addKnob ("revMix", "REVERB") },
+                { { &delayDiv, 76 } });
+
+    addSection ("STARS", { &addKnob ("stars", "DENSITY"), &addKnob ("starHeight", "HEIGHT"), &addKnob ("starLevel", "LEVEL"),
+                           &addKnob ("noise", "VINYL") });
+
+    addSection ("OUT", { &addKnob ("outGain", "OUTPUT") });
+
+    for (int i = 0; i < proc.getNumPrograms(); ++i)
+        presetBox.addItem (proc.getProgramName (i), i + 1);
+    presetBox.setSelectedId (proc.getCurrentProgram() + 1, juce::dontSendNotification);
+    presetBox.setJustificationType (juce::Justification::centred);
+    presetBox.onChange = [this] { proc.setCurrentProgram (presetBox.getSelectedId() - 1); repaint(); };
+    addAndMakeVisible (presetBox);
+
+    auto step = [this] (int delta)
+    {
+        const int n = proc.getNumPrograms();
+        proc.setCurrentProgram ((proc.getCurrentProgram() + delta + n) % n);
+        presetBox.setSelectedId (proc.getCurrentProgram() + 1, juce::dontSendNotification);
+        repaint();
+    };
+    prevPreset.onClick = [step] { step (-1); };
+    nextPreset.onClick = [step] { step (1); };
+    addAndMakeVisible (prevPreset);
+    addAndMakeVisible (nextPreset);
+
+    addAndMakeVisible (starField);
+
+    keyboard = std::make_unique<SpaceKeyboard> (proc.keyboardState);
+    keyboard->setAvailableRange (36, 83);
+    keyboard->setScrollButtonsVisible (false);
+    keyboard->setColour (juce::MidiKeyboardComponent::shadowColourId, juce::Colours::transparentBlack);
+    keyboard->setBlackNoteLengthProportion (0.6f);
+    keyboard->setOctaveForMiddleC (4);
+    addAndMakeVisible (*keyboard);
 
     setSize (baseWidth(), baseHeight());
+    timerCallback();
     startTimerHz (30);
 }
 
 IndikatPanel::~IndikatPanel()
 {
     setLookAndFeel (nullptr);
+}
+
+IndikatPanel::Knob& IndikatPanel::addKnob (const juce::String& paramId, const juce::String& name)
+{
+    auto k = std::make_unique<Knob>();
+    k->slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
+    k->slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 72, 18);
+    k->slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+    k->slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+    k->slider.setColour (juce::Slider::textBoxTextColourId, Palette::text);
+    k->slider.setRotaryParameters (juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
+    k->label.setText (name, juce::dontSendNotification);
+    k->label.setJustificationType (juce::Justification::centred);
+    k->label.setFont (fonts->label (11.0f).withExtraKerningFactor (0.18f));
+    k->label.setColour (juce::Label::textColourId, Palette::dim);
+    addAndMakeVisible (k->slider);
+    addAndMakeVisible (k->label);
+    k->slider.sendLookAndFeelChange();
+    k->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, paramId, k->slider);
+
+    if (auto* param = proc.apvts.getParameter (paramId))
+        k->slider.setDoubleClickReturnValue (true, param->convertFrom0to1 (param->getDefaultValue()));
+
+    knobs.push_back (std::move (k));
+    return *knobs.back();
+}
+
+void IndikatPanel::addChoice (juce::ComboBox& box,
+                              std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>& att,
+                              const juce::String& paramId)
+{
+    if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (proc.apvts.getParameter (paramId)))
+        box.addItemList (choice->choices, 1);
+    addAndMakeVisible (box);
+    att = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, paramId, box);
+}
+
+void IndikatPanel::addSection (const juce::String& title, std::initializer_list<Knob*> ks,
+                               std::vector<std::pair<juce::Component*, int>> header)
+{
+    sections.push_back ({ title, ks, std::move (header), {} });
+}
+
+void IndikatPanel::padPressed (int i)
+{
+    if (hold.getToggleState() && proc.padRequest.load() == i)
+        proc.padRequest.store (-1);
+    else
+        proc.padRequest.store (i);
+}
+
+void IndikatPanel::padReleased (int i)
+{
+    if (! hold.getToggleState() && proc.padRequest.load() == i)
+        proc.padRequest.store (-1);
 }
 
 //==============================================================================
@@ -519,85 +619,28 @@ void IndikatPanel::renderBackground()
     background = juce::Image (juce::Image::RGB, w, h, true);
     juce::Graphics g (background);
 
-    // Tiefer Raum; die Sonne ist hier draußen nur noch ein heller Stern
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff0d1828), (float) w * 0.8f, (float) -h * 0.1f,
-                                             Palette::space0, (float) w * 0.2f, (float) h * 1.0f, true));
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff0d1828), (float) w * 0.78f, (float) -h * 0.15f,
+                                             Palette::space0, (float) w * 0.2f, (float) h * 1.1f, true));
     g.fillAll();
 
-    juce::Random stars (0x1d1ca7);
-    for (int i = 0; i < 300; ++i)
+    juce::Random rng (0x1d1ca7);
+    for (int i = 0; i < 320; ++i)
     {
-        const float x = stars.nextFloat() * (float) w, y = stars.nextFloat() * (float) h;
-        const float bright = std::pow (stars.nextFloat(), 3.0f);
+        const float x = rng.nextFloat() * (float) w, y = rng.nextFloat() * (float) h;
+        const float bright = std::pow (rng.nextFloat(), 3.0f);
         const float r = 0.35f + bright * 0.9f;
-        const auto col = stars.nextFloat() < 0.15f ? Palette::accent : Palette::star;
+        const auto col = rng.nextFloat() < 0.15f ? Palette::accent : juce::Colour (0xffe8eef8);
         g.setColour (col.withAlpha (0.08f + bright * 0.55f));
         g.fillEllipse (x - r, y - r, r * 2.0f, r * 2.0f);
     }
-    glowDot (g, { (float) w - 70.0f, 150.0f }, 1.6f, Palette::star);   // die ferne Sonne
 
-    // Umlaufbahnen
-    for (int i = 0; i < 2; ++i)
+    const juce::Point<float> origin ((float) w * 1.02f, (float) -h * 0.25f);
+    for (int i = 0; i < 4; ++i)
     {
-        const float r = 172.0f + 30.0f * (float) i;
-        g.setColour (Palette::accent.withAlpha (0.07f - 0.025f * (float) i));
-        g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f * 0.92f).withCentre (centre), 1.0f);
+        const float r = (float) h * (0.55f + 0.32f * (float) i);
+        g.setColour (Palette::accent.withAlpha (0.035f - 0.006f * (float) i));
+        g.drawEllipse (juce::Rectangle<float> (r * 2.4f, r * 2.0f).withCentre (origin), 1.0f);
     }
-}
-
-void IndikatPanel::drawSparks (juce::Graphics& g, double now) const
-{
-    for (auto& s : sparks)
-    {
-        const float age = (float) (now - s.born);
-        const bool glitch = s.type == PlutoEngine::Glitch;
-        const float life = glitch ? 0.6f : 1.8f;
-        if (age >= life) continue;
-        const float k = age / life;
-        const auto col = elementColour (s.type);
-
-        if (glitch)
-        {
-            juce::Random r ((juce::int64) (s.born * 1000.0) + (juce::int64) (age * 20.0f));
-            for (int i = 0; i < 4; ++i)
-            {
-                const float wdt = 12.0f + 50.0f * r.nextFloat();
-                g.setColour ((i % 2 == 0 ? col : Palette::accent).withAlpha (0.5f * (1.0f - k)));
-                g.fillRect (s.pos.x - wdt * 0.5f + (r.nextFloat() - 0.5f) * 30.0f,
-                            s.pos.y + (r.nextFloat() - 0.5f) * 22.0f, wdt, 1.5f);
-            }
-            glowDot (g, s.pos, 2.0f, col.withAlpha (1.0f - k));
-            continue;
-        }
-
-        const float big = (s.type == PlutoEngine::Pings || s.type == PlutoEngine::Sweeps) ? 1.0f : 0.6f;
-        const float ringR = 3.0f + 26.0f * big * std::sqrt (k);
-        g.setColour (col.withAlpha (0.45f * (1.0f - k)));
-        g.drawEllipse (juce::Rectangle<float> (ringR * 2.0f, ringR * 2.0f).withCentre (s.pos), 1.0f);
-        glowDot (g, s.pos, 2.4f * (1.0f - 0.5f * k), col.withAlpha (1.0f - k));
-    }
-}
-
-void IndikatPanel::drawChip (juce::Graphics& g, juce::Rectangle<int> r, int e) const
-{
-    const bool on = (activeMask >> e) & 1u;
-    const float act = activity[(size_t) e];
-    const auto col = elementColour (e);
-    auto rf = r.toFloat().reduced (3.0f, 3.0f);
-    const float rad = rf.getHeight() * 0.5f;
-
-    g.setColour (on ? col.withAlpha (0.05f + 0.08f * act) : juce::Colours::transparentBlack);
-    g.fillRoundedRectangle (rf, rad);
-    g.setColour (on ? col.withAlpha (0.35f + 0.4f * act) : Palette::hair);
-    g.drawRoundedRectangle (rf, rad, 1.0f);
-
-    const juce::Point<float> dot (rf.getX() + rad + 2.0f, rf.getCentreY());
-    if (on) glowDot (g, dot, 1.6f + 1.2f * act, col.withAlpha (0.5f + 0.5f * act));
-    else    { g.setColour (Palette::faint); g.fillEllipse (juce::Rectangle<float> (3.0f, 3.0f).withCentre (dot)); }
-
-    g.setColour (on ? Palette::text : Palette::faint);
-    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.08f));
-    g.drawText (PlutoEngine::elementName (e), rf.withTrimmedLeft (rad * 2.0f + 6.0f), juce::Justification::centredLeft);
 }
 
 void IndikatPanel::paint (juce::Graphics& g)
@@ -606,138 +649,185 @@ void IndikatPanel::paint (juce::Graphics& g)
         renderBackground();
     g.drawImageAt (background, 0, 0);
 
-    // Logo (Vektor, 4.93 : 1)
     if (logo != nullptr)
-        logo->drawWithin (g, { 30.0f, 32.0f, 22.0f * 4.93f, 22.0f }, juce::RectanglePlacement::xLeft, 1.0f);
-    glowDot (g, { 33.0f, 76.0f }, 2.2f, Palette::accent);
+        logo->drawWithin (g, { 30.0f, 52.0f, 24.0f * 4.93f, 24.0f }, juce::RectanglePlacement::xLeft, 1.0f);
+    glowDot (g, { 33.0f, 96.0f }, 2.2f, Palette::accent);
     g.setColour (Palette::dim);
     g.setFont (fonts->mono (11.5f).withExtraKerningFactor (0.45f));
-    g.drawText ("PLUTO", 44, 68, 200, 16, juce::Justification::centredLeft);
+    g.drawText ("STAR PAD", 44, 88, 200, 16, juce::Justification::centredLeft);
     g.setColour (Palette::faint);
     g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.2f));
-    g.drawText ("ATMO UNIT // 2.0", 31, 86, 160, 16, juce::Justification::centredLeft);
+    g.drawText ("PAD UNIT // 1.0", 31, 108, 140, 16, juce::Justification::centredLeft);
 
-    // Tempo vom Host
-    const int right = getWidth() - 30;
-    g.setColour (Palette::text);
-    g.setFont (fonts->mono (22.0f).withExtraKerningFactor (0.08f));
-    g.drawText (juce::String (proc.bpmShown.load(), 1), right - 160, 36, 160, 26, juce::Justification::centredRight);
+    // Preset-Nummer und Beschreibung
+    g.setColour (Palette::dim);
+    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.35f));
+    g.drawText ("PROGRAM " + juce::String (proc.getCurrentProgram() + 1).paddedLeft ('0', 2)
+                    + " / " + juce::String (proc.getNumPrograms()).paddedLeft ('0', 2),
+                presetBox.getBounds().translated (0, -22).withHeight (16), juce::Justification::centred);
     g.setColour (Palette::faint);
-    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.3f));
-    g.drawText ("BPM // GRID 1/16", right - 200, 68, 200, 16, juce::Justification::centredRight);
+    g.setFont (fonts->label (11.5f));
+    g.drawFittedText (proc.getProgramDescription (proc.getCurrentProgram()),
+                      presetBox.getBounds().translated (0, 34).withHeight (30).expanded (24, 0),
+                      juce::Justification::centredTop, 2);
 
-    // Trennlinie unter dem Header
     juce::ColourGradient line (Palette::hairHi.withAlpha (0.0f), 28.0f, 0.0f,
                                Palette::hairHi.withAlpha (0.0f), (float) getWidth() - 28.0f, 0.0f, false);
     line.addColour (0.15, Palette::hairHi);
     line.addColour (0.85, Palette::hairHi);
     g.setGradientFill (line);
-    g.fillRect (28, 116, getWidth() - 56, 1);
+    g.fillRect (28, 158, getWidth() - 56, 1);
 
-    const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
-
-    // Schockwelle nach dem Klick
-    const float sinceClick = (float) (now - clickTime);
-    if (sinceClick < 1.2f)
+    int index = 1;
+    for (auto& s : sections)
     {
-        const float k = sinceClick / 1.2f;
-        const float r = planet.radius() + (210.0f - planet.radius()) * (1.0f - std::pow (1.0f - k, 3.0f));
-        juce::Path wave;
-        wave.addEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f * 0.92f).withCentre (centre));
-        strokeGlow (g, wave, Palette::accent.withAlpha (0.8f * (1.0f - k)), 1.4f);
+        auto r = s.bounds.toFloat();
+        g.setColour (juce::Colours::white.withAlpha (0.012f));
+        g.fillRoundedRectangle (r, 6.0f);
+        g.setColour (Palette::hair);
+        g.drawRoundedRectangle (r.reduced (0.5f), 6.0f, 1.0f);
+
+        g.setFont (fonts->mono (10.5f));
+        g.setColour (Palette::accent.withAlpha (0.8f));
+        g.drawText (juce::String (index++).paddedLeft ('0', 2), s.bounds.getX() + 14, s.bounds.getY() + 10, 24, 18,
+                    juce::Justification::centredLeft);
+        g.setFont (fonts->wide (9.0f).withExtraKerningFactor (0.3f));
+        g.setColour (Palette::text.withAlpha (0.85f));
+        g.drawText (s.title, s.bounds.getX() + 36, s.bounds.getY() + 10, 200, 18, juce::Justification::centredLeft);
     }
 
-    // Charon auf seiner Bahn
-    const float charonA = (float) std::fmod (planet.spin * 0.45, juce::MathConstants<double>::twoPi);
-    auto charon = centre.getPointOnCircumference (172.0f, charonA);
-    charon.y = centre.y + (charon.y - centre.y) * 0.92f;
-    glowDot (g, charon, 2.6f, Palette::ice.withAlpha (0.9f));
-
-    drawSparks (g, now);
-
-    // Szene und Hinweis
-    g.setFont (fonts->wide (9.0f).withExtraKerningFactor (0.45f));
-    g.setColour (Palette::text.withAlpha (0.85f));
-    g.drawText ("TAP PLUTO", 0, 128, getWidth(), 18, juce::Justification::centred);
-    g.setFont (fonts->mono (12.0f).withExtraKerningFactor (0.3f));
-    g.setColour (Palette::dim);
-    g.drawText ("SCENE " + juce::String::toHexString ((int) shownSeed).toUpperCase().paddedLeft ('0', 8),
-                keyBox.getRight(), keyBox.getY(), scaleBox.getX() - keyBox.getRight(), keyBox.getHeight(),
-                juce::Justification::centred);
-
-    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.3f));
-    g.setColour (Palette::faint);
-    g.drawText ("KEY", keyBox.getX(), keyBox.getY() - 14, 80, 12, juce::Justification::centredLeft);
-    g.drawText ("SCALE", scaleBox.getX(), scaleBox.getY() - 14, 80, 12, juce::Justification::centredLeft);
-
-    // Elemente
-    auto box = layerBox.toFloat();
-    g.setColour (juce::Colours::white.withAlpha (0.012f));
-    g.fillRoundedRectangle (box, 6.0f);
     g.setColour (Palette::hair);
-    g.drawRoundedRectangle (box.reduced (0.5f), 6.0f, 1.0f);
-    g.setFont (fonts->mono (10.5f));
-    g.setColour (Palette::accent.withAlpha (0.8f));
-    g.drawText ("01", layerBox.getX() + 14, layerBox.getY() + 10, 24, 18, juce::Justification::centredLeft);
-    g.setFont (fonts->wide (9.0f).withExtraKerningFactor (0.3f));
-    g.setColour (Palette::text.withAlpha (0.85f));
-    g.drawText ("LAYERS", layerBox.getX() + 36, layerBox.getY() + 10, 200, 18, juce::Justification::centredLeft);
+    g.drawRect (keyboard->getBounds().expanded (1), 1);
+}
 
-    auto grid = layerBox.reduced (12, 0).withTrimmedTop (36).withTrimmedBottom (10);
-    constexpr int cols = 5;
-    const int rows = (PlutoEngine::numElements + cols - 1) / cols;
-    const int rowH = grid.getHeight() / rows, colW = grid.getWidth() / cols;
-    for (int e = 0; e < PlutoEngine::numElements; ++e)
-        drawChip (g, { grid.getX() + (e % cols) * colW, grid.getY() + (e / cols) * rowH, colW, rowH },
-                  e);
+juce::Rectangle<int> IndikatPanel::layoutSection (Section& s, juce::Rectangle<int> r)
+{
+    s.bounds = r;
+    auto inner = r.reduced (12, 10);
+    auto header = inner.removeFromTop (20);
+
+    for (auto& [comp, width] : s.headerControls)
+    {
+        comp->setBounds (header.removeFromRight (width));
+        header.removeFromRight (10);
+    }
+
+    inner.removeFromTop (8);
+    if (! s.knobs.empty())
+    {
+        const int knobW = inner.getWidth() / (int) s.knobs.size();
+        for (auto* k : s.knobs)
+        {
+            auto cell = inner.removeFromLeft (knobW);
+            k->label.setBounds (cell.removeFromTop (16));
+            k->slider.setBounds (cell.reduced (2, 0));
+        }
+    }
+    return inner;
+}
+
+void IndikatPanel::place (juce::Rectangle<int> row, std::initializer_list<int> idx)
+{
+    constexpr int gap = 12;
+    auto weightOf = [this] (int i) { return juce::jmax (1.3f, (float) sections[(size_t) i].knobs.size()); };
+    float totalWeight = 0.0f;
+    for (int i : idx) totalWeight += weightOf (i);
+    const int avail = row.getWidth() - gap * ((int) idx.size() - 1);
+
+    int n = 0;
+    for (int i : idx)
+    {
+        auto& s = sections[(size_t) i];
+        const int w = ++n == (int) idx.size() ? row.getWidth() : juce::roundToInt ((float) avail * weightOf (i) / totalWeight);
+        layoutSection (s, row.removeFromLeft (w));
+        row.removeFromLeft (gap);
+    }
 }
 
 void IndikatPanel::resized()
 {
-    centre = { (float) getWidth() * 0.5f, 332.0f };
-    planet.setBounds (juce::Rectangle<int> (284, 284).withCentre (centre.roundToInt()));
-    layerBox = juce::Rectangle<int> (28, getHeight() - 28 - 150, getWidth() - 56, 150);
-    keyBox.setBounds (34, layerBox.getY() - 40, 64, 24);
-    scaleBox.setBounds (getWidth() - 34 - 120, layerBox.getY() - 40, 120, 24);
-    background = {};
+    auto area = getLocalBounds().reduced (28, 0);
+
+    // Header: Marke | Sternenfeld | Presets
+    auto header = juce::Rectangle<int> (area.getX(), 20, area.getWidth(), 126);
+    auto presetColumn = header.removeFromRight (270);
+    auto presetArea = presetColumn.withTrimmedTop (44).withHeight (28);
+    nextPreset.setBounds (presetArea.removeFromRight (28));
+    prevPreset.setBounds (presetArea.removeFromLeft (28));
+    presetBox.setBounds (presetArea.reduced (8, 0));
+    header.removeFromRight (30);
+    starField.setBounds (header.removeFromRight (520));
+
+    // Sektionen
+    area.setTop (172);
+    area.removeFromBottom (24);
+    keyboard->setBounds (area.removeFromBottom (70));
+    keyboard->setKeyWidth ((float) keyboard->getWidth() / 28.0f);
+    area.removeFromBottom (14);
+
+    constexpr int gap = 12;
+    auto padArea = layoutSection (sections[0], area.removeFromTop (142));
+    area.removeFromTop (gap);
+    {
+        const int padGap = 10;
+        const int pw = (padArea.getWidth() - padGap * (StarPadEngine::numPads - 1)) / StarPadEngine::numPads;
+        for (int i = 0; i < StarPadEngine::numPads; ++i)
+        {
+            pads[i].setBounds (padArea.removeFromLeft (pw).withTrimmedTop (2));
+            padArea.removeFromLeft (padGap);
+        }
+    }
+
+    const int rowH = (area.getHeight() - gap) / 2;
+    place (area.removeFromTop (rowH), { 1, 2, 3 });
+    area.removeFromTop (gap);
+    place (area, { 4, 5, 6 });
+
+    int knobWidth = std::numeric_limits<int>::max();
+    for (auto& k : knobs)
+        knobWidth = juce::jmin (knobWidth, k->slider.getWidth());
+    for (auto& k : knobs)
+        k->slider.setBounds (k->slider.getBounds().withSizeKeepingCentre (knobWidth, k->slider.getHeight()));
 }
 
 void IndikatPanel::timerCallback()
 {
-    auto& d = proc.engine.display;
-    for (int e = 0; e < PlutoEngine::numElements; ++e)
-        activity[(size_t) e] = 0.6f * activity[(size_t) e] + 0.4f * d.activity[(size_t) e].load();
-    activeMask = d.activeMask.load();
-    shownSeed = proc.getSeed();
+    const auto params = proc.readParams();
+    const int pad = proc.padRequest.load();
 
-    const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
-    const double dt = juce::jlimit (0.0, 0.2, now - lastTick);
-    lastTick = now;
-    spinBoost *= (float) std::exp (-dt * 2.5);
-    planet.spin += dt * (0.12 + spinBoost);
-
-    // Neue Ereignisse als Funken auf der Umlaufbahn
-    const int count = d.eventCount.load (std::memory_order_acquire);
-    if (count - lastEventCount > PlutoEngine::Display::ringSize)
-        lastEventCount = count - PlutoEngine::Display::ringSize;
-    for (; lastEventCount < count; ++lastEventCount)
+    if (params.chordSet != lastSet || params.key != lastKey || pad != lastPad)
     {
-        const auto idx = (size_t) (lastEventCount % PlutoEngine::Display::ringSize);
-        const float pan = d.eventPan[idx].load (std::memory_order_relaxed);
-        float a = (pan - 0.5f) * juce::MathConstants<float>::pi;
-        if (rng.nextBool()) a = juce::MathConstants<float>::pi - a;
-        auto pos = centre.getPointOnCircumference (172.0f + 30.0f * (float) rng.nextInt (2), a);
-        pos.y = centre.y + (pos.y - centre.y) * 0.92f;
-        sparks.push_back ({ pos, d.eventType[idx].load (std::memory_order_relaxed), now });
+        for (int i = 0; i < StarPadEngine::numPads; ++i)
+        {
+            pads[i].chord = StarPadEngine::padLabel (params.chordSet, params.key, i);
+            pads[i].degree = StarPadEngine::padDegree (params.chordSet, i);
+            pads[i].lit = pad == i;
+            pads[i].repaint();
+        }
+        lastSet = params.chordSet; lastKey = params.key; lastPad = pad;
     }
-    sparks.erase (std::remove_if (sparks.begin(), sparks.end(), [now] (const Spark& s) { return now - s.born > 2.0; }),
-                  sparks.end());
 
-    repaint();
+    if (pad >= 0)
+        starField.chordText = StarPadEngine::padLabel (params.chordSet, params.key, pad);
+    else
+    {
+        juce::StringArray names;
+        const juce::uint64 m[2] { proc.engine.heldMask[0].load(), proc.engine.heldMask[1].load() };
+        for (int n = 0; n < 128 && names.size() < 5; ++n)
+            if (m[n >> 6] & (1ull << (n & 63))) names.add (noteName (n));
+        starField.chordText = names.isEmpty() ? "-" : names.joinIntoString (" ");
+    }
+    starField.tick();
+
+    if (presetBox.getSelectedId() != proc.getCurrentProgram() + 1)
+    {
+        presetBox.setSelectedId (proc.getCurrentProgram() + 1, juce::dontSendNotification);
+        repaint();
+    }
 }
 
 //==============================================================================
-PlutoEditor::PlutoEditor (PlutoProcessor& p)
+StarPadEditor::StarPadEditor (StarPadProcessor& p)
     : AudioProcessorEditor (&p), panel (p)
 {
     addAndMakeVisible (panel);
@@ -749,7 +839,7 @@ PlutoEditor::PlutoEditor (PlutoProcessor& p)
     setSize (w, h);
 }
 
-void PlutoEditor::resized()
+void StarPadEditor::resized()
 {
     const float scale = (float) getWidth() / (float) IndikatPanel::baseWidth();
     panel.setBounds (0, 0, IndikatPanel::baseWidth(), IndikatPanel::baseHeight());

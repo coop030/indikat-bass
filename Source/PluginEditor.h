@@ -6,28 +6,26 @@
 struct IndikatFonts
 {
     IndikatFonts();
-    juce::Font wide (float h) const  { return make (michroma, h); }
-    juce::Font label (float h) const { return make (questrial, h); }
-    juce::Font mono (float h) const  { return make (shareTech, h); }
+    juce::Font wide (float h) const  { return juce::Font (juce::FontOptions (michroma).withHeight (h)); }
+    juce::Font label (float h) const { return juce::Font (juce::FontOptions (questrial).withHeight (h)); }
+    juce::Font mono (float h) const  { return juce::Font (juce::FontOptions (shareTech).withHeight (h)); }
 
     juce::Typeface::Ptr michroma, questrial, shareTech;
-
-private:
-    static juce::Font make (const juce::Typeface::Ptr& t, float h)
-    {
-       #if JUCE_MAJOR_VERSION >= 8
-        return juce::Font (juce::FontOptions (t).withHeight (h));
-       #else
-        return juce::Font (t).withHeight (h);   // JUCE 7: für den Windows-Build mit MinGW
-       #endif
-    }
 };
 
-// Auswahlfelder und Menüs im Indikat-Look
+// Gleicher Look wie INDIKAT Bass Synth
 class IndikatLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     IndikatLookAndFeel();
+
+    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos,
+                           float startAngle, float endAngle, juce::Slider&) override;
+    juce::Label* createSliderTextBox (juce::Slider&) override;
+
+    void drawToggleButton (juce::Graphics&, juce::ToggleButton&, bool highlighted, bool down) override;
+    void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool highlighted, bool down) override;
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool highlighted, bool down) override;
 
     void drawComboBox (juce::Graphics&, int w, int h, bool down, int, int, int, int, juce::ComboBox&) override;
     juce::Font getComboBoxFont (juce::ComboBox&) override;
@@ -39,100 +37,136 @@ public:
                             const juce::String& shortcutKeyText, const juce::Drawable* icon,
                             const juce::Colour* textColour) override;
     juce::Font getPopupMenuFont() override;
+    juce::Font getLabelFont (juce::Label&) override;
 
 private:
     juce::SharedResourcePointer<IndikatFonts> fonts;
 };
 
-// Der Planet ist der einzige Bedienknopf: Klick = neue Zufallsszene
-class PlanetButton : public juce::Component
+class SpaceKeyboard : public juce::MidiKeyboardComponent
 {
 public:
-    PlanetButton();
+    explicit SpaceKeyboard (juce::MidiKeyboardState& s) : MidiKeyboardComponent (s, horizontalKeyboard) {}
 
+    void drawWhiteNote (int note, juce::Graphics&, juce::Rectangle<float> area, bool isDown, bool isOver,
+                        juce::Colour lineColour, juce::Colour textColour) override;
+    void drawBlackNote (int note, juce::Graphics&, juce::Rectangle<float> area, bool isDown, bool isOver,
+                        juce::Colour noteFillColour) override;
+};
+
+// Fenster im Header: Sternenhimmel, Sternbild des gehaltenen Akkords, Funken der Glöckchen, Horizont = Ausgang
+class StarField : public juce::Component
+{
+public:
+    explicit StarField (StarPadProcessor&);
     void paint (juce::Graphics&) override;
-    bool hitTest (int x, int y) override;
-    void mouseEnter (const juce::MouseEvent&) override { repaint(); }
-    void mouseExit (const juce::MouseEvent&) override  { repaint(); }
-    void mouseDown (const juce::MouseEvent&) override;
-    void mouseUp (const juce::MouseEvent&) override;
-
-    float radius() const { return (float) getWidth() * 0.5f - 22.0f; }
-
-    std::function<void()> onClick;
-    double spin = -1.1;   // Start: das Herz auf der Lichtseite
+    void tick();                       // vom Panel-Timer (30 Hz)
+    juce::String chordText;
 
 private:
-    // Vorberechnete Kugelgeometrie pro Pixel
-    struct SpherePixel { float u = 0, v = 0, dot = 0, dotLon = 0, dotLat = 0, limb = 0, haze = 0, edge = 0, halo = 0; };
-    static constexpr float haloScale = 1.12f;
-    void prepareSphere (int size);
+    struct Star  { float x, y, r, phase, speed, bright; bool cool; };
+    struct Flare { float x, y, size, life; bool violet; };
 
-    std::vector<SpherePixel> sphere;
-    int sphereSize = 0;
-    juce::Image frame;
-    float frameShift = -1.0f, frameGlow = -1.0f;   // womit das Bild zuletzt gerechnet wurde
-    bool pressed = false;
+    StarPadProcessor& proc;
+    juce::SharedResourcePointer<IndikatFonts> fonts;
+    std::vector<Star> stars;
+    std::vector<Flare> flares;
+    std::vector<int> held;
+    float level = 0.0f, time = 0.0f;
+    juce::Random rng;
+};
+
+// Ein Akkord-Pad
+class ChordPad : public juce::Component
+{
+public:
+    std::function<void()> onPress, onRelease;
+    juce::String chord, degree;
+    int number = 1;
+    bool lit = false;
+
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override { if (onPress) onPress(); }
+    void mouseUp (const juce::MouseEvent&) override   { if (onRelease) onRelease(); }
+
+private:
+    juce::SharedResourcePointer<IndikatFonts> fonts;
 };
 
 // Die Oberfläche in fester Basisgröße; der Editor skaliert sie
 class IndikatPanel : public juce::Component, private juce::Timer
 {
 public:
-    explicit IndikatPanel (PlutoProcessor&);
+    explicit IndikatPanel (StarPadProcessor&);
     ~IndikatPanel() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    static int baseWidth()  { return 560; }
-    static int baseHeight() { return 760; }
+    static int baseWidth()  { return 1120; }
+    static int baseHeight() { return 830; }
 
 private:
-    struct Spark
+    struct Knob
     {
-        juce::Point<float> pos;
-        int type = 0;
-        double born = 0.0;
+        juce::Slider slider;
+        juce::Label label;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
 
-    void renderBackground();
-    void drawSparks (juce::Graphics&, double now) const;
-    void drawChip (juce::Graphics&, juce::Rectangle<int>, int element) const;
-    void timerCallback() override;
+    struct Section
+    {
+        juce::String title;
+        std::vector<Knob*> knobs;
+        std::vector<std::pair<juce::Component*, int>> headerControls;
+        juce::Rectangle<int> bounds;
+    };
 
-    PlutoProcessor& proc;
+    Knob& addKnob (const juce::String& paramId, const juce::String& name);
+    void addChoice (juce::ComboBox&, std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>&,
+                    const juce::String& paramId);
+    void addSection (const juce::String& title, std::initializer_list<Knob*>,
+                     std::vector<std::pair<juce::Component*, int>> header = {});
+    juce::Rectangle<int> layoutSection (Section&, juce::Rectangle<int>);
+    void place (juce::Rectangle<int> row, std::initializer_list<int> sectionIndices);
+    void renderBackground();
+    void timerCallback() override;
+    void padPressed (int);
+    void padReleased (int);
+
+    StarPadProcessor& proc;
     IndikatLookAndFeel lnf;
     juce::SharedResourcePointer<IndikatFonts> fonts;
 
-    PlanetButton planet;
-    juce::ComboBox keyBox, scaleBox;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAtt, scaleAtt;
+    std::vector<std::unique_ptr<Knob>> knobs;
+    std::vector<Section> sections;
+
+    juce::ComboBox wave, chordSet, voicing, key, pulse, lfoRate, delayDiv, presetBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> waveAtt, chordSetAtt, voicingAtt, keyAtt,
+                                                                           pulseAtt, lfoRateAtt, delayDivAtt;
+    juce::ToggleButton chordOn { "MIDI CHORD" }, hold { "HOLD" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> chordOnAtt;
+    juce::TextButton prevPreset { "<" }, nextPreset { ">" };
+
+    StarField starField;
+    ChordPad pads[StarPadEngine::numPads];
+    std::unique_ptr<SpaceKeyboard> keyboard;
 
     juce::Image background;
     std::unique_ptr<juce::Drawable> logo;
-    juce::Rectangle<int> layerBox;
-    juce::Point<float> centre;
-
-    std::vector<Spark> sparks;
-    int lastEventCount = 0;
-    juce::Random rng;
-    std::array<float, PlutoEngine::numElements> activity {};
-    juce::uint32 activeMask = 0, shownSeed = 0;
-    double lastTick = 0.0, clickTime = -10.0;
-    float spinBoost = 0.0f;
+    int lastSet = -1, lastKey = -1, lastPad = -2;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IndikatPanel)
 };
 
-class PlutoEditor : public juce::AudioProcessorEditor
+class StarPadEditor : public juce::AudioProcessorEditor
 {
 public:
-    explicit PlutoEditor (PlutoProcessor&);
+    explicit StarPadEditor (StarPadProcessor&);
     void resized() override;
 
 private:
     IndikatPanel panel;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlutoEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StarPadEditor)
 };

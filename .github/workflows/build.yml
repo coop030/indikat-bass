@@ -1,8 +1,8 @@
-name: Build INDIKAT Pluto
+name: Build INDIKAT Star Pad
 
 on:
   push:
-    branches: [pluto]
+    branches: [starpad]
   workflow_dispatch:
 
 jobs:
@@ -44,25 +44,25 @@ jobs:
       - name: Packen
         shell: bash
         run: |
-          mkdir -p dist/INDIKAT-Pluto
-          cp -R build/IndikatPluto_artefacts/Release/VST3/*.vst3 dist/INDIKAT-Pluto/
+          mkdir -p dist/INDIKAT-Star-Pad
+          cp -R build/IndikatStarPad_artefacts/Release/VST3/*.vst3 dist/INDIKAT-Star-Pad/
           if [ "$RUNNER_OS" == "macOS" ]; then
-            cp -R build/IndikatPluto_artefacts/Release/AU/*.component dist/INDIKAT-Pluto/
-            cp -R build/IndikatPluto_artefacts/Release/Standalone/*.app dist/INDIKAT-Pluto/
-            for p in dist/INDIKAT-Pluto/*; do codesign --force --deep --sign - "$p"; done
-            (cd dist && ditto -c -k --keepParent INDIKAT-Pluto "INDIKAT-Pluto-${{ matrix.name }}.zip")
+            cp -R build/IndikatStarPad_artefacts/Release/AU/*.component dist/INDIKAT-Star-Pad/
+            cp -R build/IndikatStarPad_artefacts/Release/Standalone/*.app dist/INDIKAT-Star-Pad/
+            for p in dist/INDIKAT-Star-Pad/*; do codesign --force --deep --sign - "$p"; done
+            (cd dist && ditto -c -k --keepParent INDIKAT-Star-Pad "INDIKAT-Star-Pad-${{ matrix.name }}.zip")
           elif [ "$RUNNER_OS" == "Windows" ]; then
-            cp build/IndikatPluto_artefacts/Release/Standalone/*.exe dist/INDIKAT-Pluto/
-            (cd dist && 7z a -tzip "INDIKAT-Pluto-${{ matrix.name }}.zip" INDIKAT-Pluto > /dev/null)
+            cp build/IndikatStarPad_artefacts/Release/Standalone/*.exe dist/INDIKAT-Star-Pad/
+            (cd dist && 7z a -tzip "INDIKAT-Star-Pad-${{ matrix.name }}.zip" INDIKAT-Star-Pad > /dev/null)
           else
-            (cd dist && zip -qry "INDIKAT-Pluto-${{ matrix.name }}.zip" INDIKAT-Pluto)
+            (cd dist && zip -qry "INDIKAT-Star-Pad-${{ matrix.name }}.zip" INDIKAT-Star-Pad)
           fi
 
       - name: Hochladen
         uses: actions/upload-artifact@v5
         with:
-          name: INDIKAT-Pluto-${{ matrix.name }}
-          path: dist/INDIKAT-Pluto-${{ matrix.name }}.zip
+          name: INDIKAT-Star-Pad-${{ matrix.name }}
+          path: dist/INDIKAT-Star-Pad-${{ matrix.name }}.zip
 
   # Download-Seite: jedes Build-Ergebnis wird als Release veröffentlicht (auch wenn ein System fehlt)
   release:
@@ -80,15 +80,15 @@ jobs:
       - name: Release veröffentlichen
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: pluto-build-${{ github.run_number }}
+          tag_name: starpad-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: INDIKAT Pluto – Build ${{ github.run_number }}
+          name: INDIKAT Star Pad – Build ${{ github.run_number }}
           make_latest: false
           fail_on_unmatched_files: false
           body: |
             Automatischer Build von `${{ github.sha }}`.
 
-            **Windows:** ZIP entpacken, `INDIKAT Pluto.vst3` nach `C:\Program Files\Common Files\VST3\` kopieren. `INDIKAT Pluto.exe` ist die Standalone-Version.
+            **Windows:** ZIP entpacken, `INDIKAT Star Pad.vst3` nach `C:\Program Files\Common Files\VST3\` kopieren. `INDIKAT Star Pad.exe` ist die Standalone-Version.
             **macOS:** ZIP entpacken, `.vst3` nach `~/Library/Audio/Plug-Ins/VST3/`, `.component` nach `~/Library/Audio/Plug-Ins/Components/`.
             Danach im Terminal einmal: `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/INDIKAT* ~/Library/Audio/Plug-Ins/Components/INDIKAT*`
             **Linux:** `.vst3` nach `~/.vst3/`.

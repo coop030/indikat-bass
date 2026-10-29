@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(IndikatPluto VERSION 1.1.0)
+project(IndikatStarPad VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,7 +19,7 @@ else()
     FetchContent_MakeAvailable(JUCE)
 endif()
 
-juce_add_binary_data(PlutoData SOURCES
+juce_add_binary_data(StarPadData SOURCES
     Resources/Michroma-Regular.ttf
     Resources/Questrial-Regular.ttf
     Resources/ShareTechMono-Regular.ttf
@@ -27,40 +27,40 @@ juce_add_binary_data(PlutoData SOURCES
 
 # Beim Cross-Compilen (Windows-Build unter Linux) kann das VST3-Manifest-Tool nicht laufen
 if(CMAKE_CROSSCOMPILING)
-    set(PLUTO_VST3_MANIFEST FALSE)
+    set(STARPAD_VST3_MANIFEST FALSE)
 else()
-    set(PLUTO_VST3_MANIFEST TRUE)
+    set(STARPAD_VST3_MANIFEST TRUE)
 endif()
 
-juce_add_plugin(IndikatPluto
+juce_add_plugin(IndikatStarPad
     COMPANY_NAME "INDIKAT"
-    PRODUCT_NAME "INDIKAT Pluto"
+    PRODUCT_NAME "INDIKAT Star Pad"
     PLUGIN_MANUFACTURER_CODE Idkt
-    PLUGIN_CODE Plto
+    PLUGIN_CODE Stpd
     FORMATS VST3 AU Standalone
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE
-    VST3_CATEGORIES Instrument Generator
+    VST3_CATEGORIES Instrument Synth
     AU_MAIN_TYPE kAudioUnitType_MusicDevice
-    VST3_AUTO_MANIFEST ${PLUTO_VST3_MANIFEST})
+    VST3_AUTO_MANIFEST ${STARPAD_VST3_MANIFEST})
 
-target_sources(IndikatPluto PRIVATE
+target_sources(IndikatStarPad PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp
-    Source/PlutoEngine.cpp)
+    Source/StarPadEngine.cpp)
 
-target_compile_definitions(IndikatPluto PUBLIC
+target_compile_definitions(IndikatStarPad PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     JUCE_DISPLAY_SPLASH_SCREEN=0)
 
-target_link_libraries(IndikatPluto
+target_link_libraries(IndikatStarPad
     PRIVATE
-        PlutoData
+        StarPadData
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
@@ -68,12 +68,12 @@ target_link_libraries(IndikatPluto
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
 
-# Offline-Test: rendert Demo-WAVs mehrerer Zufallsszenen (cmake -DPLUTO_TESTS=ON)
-option(PLUTO_TESTS "Build offline render test" OFF)
-if(PLUTO_TESTS)
-    juce_add_console_app(PlutoRender PRODUCT_NAME "PlutoRender")
-    target_sources(PlutoRender PRIVATE Tests/Render.cpp Source/PlutoEngine.cpp)
-    target_compile_definitions(PlutoRender PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 PLUTO_TESTS=1)
-    target_link_libraries(PlutoRender PRIVATE juce::juce_audio_formats juce::juce_dsp
+# Offline-Test: rendert Demo-WAVs typischer Szenen und prüft Pegel (cmake -DSTARPAD_TESTS=ON)
+option(STARPAD_TESTS "Build offline render test" OFF)
+if(STARPAD_TESTS)
+    juce_add_console_app(StarPadRender PRODUCT_NAME "StarPadRender")
+    target_sources(StarPadRender PRIVATE Tests/Render.cpp Source/StarPadEngine.cpp)
+    target_compile_definitions(StarPadRender PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_link_libraries(StarPadRender PRIVATE juce::juce_audio_formats juce::juce_dsp
                           PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 endif()

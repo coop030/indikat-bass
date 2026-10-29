@@ -1,18 +1,20 @@
 #pragma once
 
-#include <juce_audio_processors/juce_audio_processors.h>
-#include "PlutoEngine.h"
+#include <juce_audio_utils/juce_audio_utils.h>
+#include "StarPadEngine.h"
 
-class PlutoProcessor : public juce::AudioProcessor
+// INDIKAT Star Pad: Pad-Synth (Instrument). MIDI-Noten und die 8 Akkord-Pads der Oberfläche
+// spielen die Engine; Tempo und Raster kommen aus dem Host.
+class StarPadProcessor : public juce::AudioProcessor
 {
 public:
-    PlutoProcessor();
+    StarPadProcessor();
+    ~StarPadProcessor() override = default;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
-    bool isBusesLayoutSupported (const BusesLayout&) const override;
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
-    using AudioProcessor::processBlock;
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
@@ -20,31 +22,34 @@ public:
     const juce::String getName() const override { return JucePlugin_Name; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
-    double getTailLengthSeconds() const override { return 8.0; }
+    bool isMidiEffect() const override { return false; }
+    double getTailLengthSeconds() const override { return 12.0; }
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    int getNumPrograms() override;
+    int getCurrentProgram() override { return currentProgram; }
+    void setCurrentProgram (int index) override;
+    const juce::String getProgramName (int index) override;
     void changeProgramName (int, const juce::String&) override {}
+    const juce::String getProgramDescription (int index) const;
 
-    void getStateInformation (juce::MemoryBlock&) override;
-    void setStateInformation (const void*, int) override;
+    void getStateInformation (juce::MemoryBlock& destData) override;
+    void setStateInformation (const void* data, int sizeInBytes) override;
 
-    // Neue zufällige Szene (vom Planeten aufgerufen)
-    void randomize();
-    juce::uint32 getSeed() const { return seed.load(); }
+    static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
+    StarPadParams readParams() const;
 
-    juce::AudioProcessorValueTreeState apvts;   // Tonart und Tonleiter
-    PlutoEngine engine;
-    std::atomic<float> bpmShown { 122.0f };
+    juce::AudioProcessorValueTreeState apvts;
+    StarPadEngine engine;
+    juce::MidiKeyboardState keyboardState;
+
+    // Akkord-Pad der Oberfläche (-1 = keins), wird im Audio-Thread übernommen
+    std::atomic<int> padRequest { -1 };
+    std::atomic<float> hostBpm { 122.0f };
 
 private:
-    void setSeed (juce::uint32);
+    double sr = 44100.0;
+    int currentProgram = 0;
+    double freeRunPpq = 0.0;
 
-    std::atomic<juce::uint32> seed { 0 };
-    std::atomic<float>* keyParam = nullptr;
-    std::atomic<float>* scaleParam = nullptr;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlutoProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StarPadProcessor)
 };
