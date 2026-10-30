@@ -76,7 +76,7 @@ public:
     std::atomic<int> scopePos { 0 };
 
 private:
-    static constexpr int maxVoices = 72, maxOsc = 7, maxSparks = 24;
+    static constexpr int maxVoices = 96, maxOsc = 7, maxSparks = 24;
     static constexpr int padTag = 200, stabTag = -1;
 
     struct Voice
@@ -157,4 +157,8 @@ private:
     juce::dsp::StateVariableTPTFilter<float> noiseBP;
 
     juce::SmoothedValue<float> chorusS, fbS, delayMixS, revMixS, noiseS, outS;
+
+    float resoComp = 1.0f;
+    float compEnv = 0.0f, compAttack = 0.0f, compRelease = 0.0f;
+    static constexpr float compThreshold = 0.5f;   // -6 dB, Ratio 4:1
 };

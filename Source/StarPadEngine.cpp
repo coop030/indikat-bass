@@ -129,6 +129,10 @@ void StarPadEngine::prepare (double sampleRate)
     noiseS.setCurrentAndTargetValue (p.noise);
     outS.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (p.outGain));
 
+    compEnv = 0.0f;
+    compAttack = std::exp (-1.0f / (0.003f * (float) sampleRate));
+    compRelease = std::exp (-1.0f / (0.2f * (float) sampleRate));
+
     lastStep = std::numeric_limits<juce::int64>::min();
     prepared = true;
 }
@@ -175,7 +179,10 @@ void StarPadEngine::setParams (const StarPadParams& np)
     noiseS.setTargetValue (p.noise);
     outS.setTargetValue (juce::Decibels::decibelsToGain (p.outGain));
     reverb.setParameters (p.revSize, 0.45f, true);
-    filt1.setResonance (0.5f + p.reso * p.reso * 11.5f);
+    // Resonanz 0..1 -> Q 0.5..12; der Eingang wird mit steigendem Q leiser, damit die Resonanzspitze nicht übersteuert
+    const float q = 0.5f + p.reso * p.reso * 11.5f;
+    filt1.setResonance (q);
+    resoComp = 1.0f / std::sqrt (1.0f + 0.6f * juce::jmax (0.0f, q - 0.707f));
 }
 
 //==============================================================================
@@ -467,7 +474,7 @@ void StarPadEngine::process (float* left, float* right, int n, double bpm, doubl
             else if (v.stage == 2)
             {
                 v.env *= v.relCoef;
-                if (v.env < 1.0e-5f) { v.active = false; continue; }
+                if (v.env < v.peak * 1.0e-3f + 1.0e-6f) { v.active = false; continue; }   // -60 dB: Platz frei
             }
 
             float sl = 0.0f, sr2 = 0.0f;
@@ -494,8 +501,8 @@ void StarPadEngine::process (float* left, float* right, int n, double bpm, doubl
         }
 
         // 24-dB-Tiefpass
-        padL = filt2.processSample (0, filt1.processSample (0, padL));
-        padR = filt2.processSample (1, filt1.processSample (1, padR));
+        padL = filt2.processSample (0, filt1.processSample (0, padL * resoComp));
+        padR = filt2.processSample (1, filt1.processSample (1, padR * resoComp));
 
         // Chorus
         chorusBuf[0][(size_t) chorusPos] = padL;
@@ -576,9 +583,20 @@ void StarPadEngine::process (float* left, float* right, int n, double bpm, doubl
             nz[c] = noiseBP.processSample (c, x) * nGain * nGain * 0.18f;
         }
 
+        // Bus-Kompressor (wie im Web-Pad): fängt Spitzen ab, bevor die Sättigung sie hart verzerrt
         const float g = outS.getNextValue();
-        const float oL = std::tanh ((padL + echoL + revL + spkL * 0.55f + nz[0]) * g);
-        const float oR = std::tanh ((padR + echoR + revR + spkR * 0.55f + nz[1]) * g);
+        float mL = (padL + echoL + revL + spkL * 0.55f + nz[0]) * g;
+        float mR = (padR + echoR + revR + spkR * 0.55f + nz[1]) * g;
+        const float det = juce::jmax (std::abs (mL), std::abs (mR));
+        compEnv = det > compEnv ? det + compAttack * (compEnv - det) : det + compRelease * (compEnv - det);
+        if (compEnv > compThreshold)
+        {
+            const float gain = (compThreshold + (compEnv - compThreshold) / 4.0f) / compEnv;
+            mL *= gain;
+            mR *= gain;
+        }
+        const float oL = std::tanh (mL);
+        const float oR = std::tanh (mR);
         left[i] = oL;
         right[i] = oR;
 

@@ -657,7 +657,7 @@ void IndikatPanel::paint (juce::Graphics& g)
     g.drawText ("STAR PAD", 44, 88, 200, 16, juce::Justification::centredLeft);
     g.setColour (Palette::faint);
     g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.2f));
-    g.drawText ("PAD UNIT // 1.0", 31, 108, 140, 16, juce::Justification::centredLeft);
+    g.drawText ("PAD UNIT // 1.0.1", 31, 108, 140, 16, juce::Justification::centredLeft);
 
     // Preset-Nummer und Beschreibung
     g.setColour (Palette::dim);
