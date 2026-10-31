@@ -97,3 +97,10 @@ if(STARPAD_TESTS)
     target_link_libraries(StarPadPresets PRIVATE StarPadData juce::juce_audio_utils juce::juce_dsp
                           PUBLIC juce::juce_recommended_config_flags)
 endif()
+if(STARPAD_TESTS)
+    juce_add_gui_app(StarPadScreenshot PRODUCT_NAME "StarPadScreenshot")
+    target_sources(StarPadScreenshot PRIVATE Tests/Screenshot.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/StarPadEngine.cpp)
+    target_compile_definitions(StarPadScreenshot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1 JucePlugin_Name="INDIKAT Star Pad")
+    target_link_libraries(StarPadScreenshot PRIVATE StarPadData juce::juce_audio_utils juce::juce_dsp
+                          PUBLIC juce::juce_recommended_config_flags)
+endif()

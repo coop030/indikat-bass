@@ -3,6 +3,8 @@
 Pad-Synth für Minimal und Dub House (VST3 / AU / Standalone, JUCE 8). 24 Presets, Akkord-Pads,
 tempo-synchrone Dub-Stabs, Echo, Hall und funkelnde „Sterne“.
 
+![INDIKAT Star Pad](docs/starpad.png)
+
 Star Pad meldet sich als **Instrument**: auf eine Instrument- bzw. MIDI-Spur laden und mit MIDI-Noten
 oder den 8 Akkord-Pads in der Oberfläche spielen.
 
@@ -60,3 +62,5 @@ cmake --build build --config Release
 
 JUCE 8.0.4 wird automatisch geladen (oder `-DJUCE_DIR=…`). Offline-Test, der Demo-WAVs nach `demos/` rendert:
 `cmake -B build -DSTARPAD_TESTS=ON && cmake --build build --target StarPadRender`.
+Weitere Tests: `StarPadPresets` (alle Presets, Pegel), `StarPadStress` (Zufallsautomation), `StarPadPerf` (CPU),
+`StarPadScreenshot` (rendert `docs/starpad.png`, unter Linux mit Xvfb).
