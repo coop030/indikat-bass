@@ -185,7 +185,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout StarPadProcessor::createLayo
 
     // Sterne
     real ("stars", "Star Density", NormalisableRange<float> (0.0f, 1.0f), 0.3f, pct);
-    integer ("starHeight", "Star Height", 1, 3, 2);
+    p.push_back (std::make_unique<AudioParameterInt> (ParameterID { "starHeight", 1 }, "Star Height", 1, 3, 2,
+        AudioParameterIntAttributes().withStringFromValueFunction ([] (int v, int)
+            { return v == 1 ? String ("+1 OCT") : v == 2 ? String ("+1/2 OCT") : String ("+2 OCT"); })));
     real ("starLevel", "Star Level", NormalisableRange<float> (0.0f, 1.0f), 0.5f, pct);
     real ("noise", "Vinyl", NormalisableRange<float> (0.0f, 1.0f), 0.1f, pct);
 

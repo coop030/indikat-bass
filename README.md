@@ -25,11 +25,11 @@ oder den 8 Akkord-Pads in der Oberfläche spielen.
 | **ENVELOPE** | Attack, Release, Stab-Länge, Puls-Muster |
 | **FILTER** | 24-dB-Tiefpass, Resonanz, LFO synchron zum Host (1 bis 32 Takte) |
 | **SPACE** | Chorus, Ping-Pong-Echo (1/8, 1/8 D, 1/4, 1/4 D) mit gefiltertem Feedback, dunkler FDN-Hall |
-| **STARS** | Glöckchen aus den Akkordtönen, 2–4 Oktaven höher: Dichte, Höhe, Pegel. Dazu Vinyl-Knistern |
+| **STARS** | Glöckchen nur aus den Tönen des gehaltenen Akkords, eine oder zwei Oktaven höher (HEIGHT: +1, +1/2 oder +2 Oktaven): Dichte, Höhe, Pegel. Dazu Vinyl-Knistern |
 | **OUT** | Ausgangspegel (mit sanfter Sättigung) |
 
 Das Fenster im Header zeigt das **Sternbild** des gehaltenen Akkords, jedes Glöckchen als Funken
-(violett = Quinte) und den Ausgang als Horizontlinie.
+(violett = zwei Oktaven höher) und den Ausgang als Horizontlinie.
 
 ## Presets
 

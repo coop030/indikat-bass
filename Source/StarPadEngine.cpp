@@ -105,7 +105,7 @@ void StarPadEngine::prepare (double sampleRate)
     fbLow.prepare (stereo);  fbLow.setType (juce::dsp::StateVariableTPTFilterType::lowpass);  fbLow.setCutoffFrequency (2600.0f);
     fbHigh.prepare (stereo); fbHigh.setType (juce::dsp::StateVariableTPTFilterType::highpass); fbHigh.setCutoffFrequency (280.0f);
 
-    sparkHP.prepare (stereo); sparkHP.setType (juce::dsp::StateVariableTPTFilterType::highpass); sparkHP.setCutoffFrequency (900.0f);
+    sparkHP.prepare (stereo); sparkHP.setType (juce::dsp::StateVariableTPTFilterType::highpass); sparkHP.setCutoffFrequency (150.0f);
     noiseBP.prepare (stereo); noiseBP.setType (juce::dsp::StateVariableTPTFilterType::bandpass);
     noiseBP.setCutoffFrequency (2200.0f); noiseBP.setResonance (0.5f);
 
@@ -366,9 +366,13 @@ void StarPadEngine::spawnSpark()
     auto* s = std::find_if (std::begin (sparks), std::end (sparks), [] (const SparkVoice& v) { return ! v.active; });
     if (s == std::end (sparks)) return;
 
-    const int pc = heldNotes[rng.nextInt (heldCount)] % 12;
-    const bool fifth = rng.nextFloat() < 0.2f;
-    const float m = 72.0f + (float) pc + 12.0f * (float) rng.nextInt (juce::jlimit (1, 3, p.starHeight)) + (fifth ? 7.0f : 0.0f);
+    // Nur Töne des gehaltenen Akkords, eine oder zwei Oktaven höher (Höhe 1: +1, 2: +1 oder +2, 3: +2)
+    const int height = juce::jlimit (1, 3, p.starHeight);
+    const int octaves = height == 1 ? 1 : height == 3 ? 2 : 1 + rng.nextInt (2);
+    int note = heldNotes[rng.nextInt (heldCount)] + 12 * octaves;
+    while (note > 108) note -= 12;                      // nicht über C8
+    const float m = (float) note;
+    const bool high = octaves == 2;
     const float dur = 0.25f + rng.nextFloat() * 1.4f;
     const float lvl = p.starLevel * (0.04f + rng.nextFloat() * 0.08f);
     if (lvl <= 0.0001f) return;
@@ -376,7 +380,7 @@ void StarPadEngine::spawnSpark()
     *s = SparkVoice();
     s->active = true;
     s->f = mtof (m);
-    s->index = s->f * 1.2f;
+    s->index = s->f * 0.9f;                              // Frequenzhub in Hz, klingt aus
     s->indexCoef = std::exp (std::log (1.0f / s->index) / (dur * 0.6f * (float) sr));
     s->peak = lvl;
     s->attackStep = lvl / (0.004f * (float) sr);
@@ -388,7 +392,7 @@ void StarPadEngine::spawnSpark()
 
     int start1, size1, start2, size2;
     sparkFifo.prepareToWrite (1, start1, size1, start2, size2);
-    if (size1 > 0) sparkBuffer[start1] = { m, juce::jmin (1.4f, 0.4f + lvl * 9.0f), fifth };
+    if (size1 > 0) sparkBuffer[start1] = { m, juce::jmin (1.4f, 0.4f + lvl * 9.0f), high };
     sparkFifo.finishedWrite (size1);
 }
 
@@ -536,7 +540,7 @@ void StarPadEngine::process (float* left, float* right, int n, double bpm, doubl
                 if (s.amp < 0.0001f) { s.active = false; continue; }
             }
             s.index = juce::jmax (1.0f, s.index * s.indexCoef);
-            s.mod += s.f * 3.51f / (float) sr;
+            s.mod += s.f * 4.0f / (float) sr;         // harmonisches Verhältnis: Glocke bleibt in Stimmung
             if (s.mod >= 1.0f) s.mod -= 1.0f;
             s.car += (s.f + std::sin (s.mod * twoPi) * s.index) / (float) sr;
             s.car -= std::floor (s.car);
