@@ -159,6 +159,9 @@ private:
     juce::SmoothedValue<float> chorusS, fbS, delayMixS, revMixS, noiseS, outS;
 
     float resoComp = 1.0f;
+    // Polyphonie-Ausgleich: viele gleichzeitige Töne werden automatisch leiser (Bezug: ein Pad-Akkord)
+    float polyGain = 1.0f, polyAttack = 0.0f, polyRelease = 0.0f;
+    static constexpr float polyRefPower = 0.16f;
     float compEnv = 0.0f, compAttack = 0.0f, compRelease = 0.0f;
     static constexpr float compThreshold = 0.5f;   // -6 dB, Ratio 4:1
 };

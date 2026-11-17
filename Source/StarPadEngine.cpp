@@ -129,6 +129,10 @@ void StarPadEngine::prepare (double sampleRate)
     noiseS.setCurrentAndTargetValue (p.noise);
     outS.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (p.outGain));
 
+    polyGain = 1.0f;
+    polyAttack = std::exp (-1.0f / (0.01f * (float) sampleRate));
+    polyRelease = std::exp (-1.0f / (0.3f * (float) sampleRate));
+
     compEnv = 0.0f;
     compAttack = std::exp (-1.0f / (0.003f * (float) sampleRate));
     compRelease = std::exp (-1.0f / (0.2f * (float) sampleRate));
@@ -464,7 +468,7 @@ void StarPadEngine::process (float* left, float* right, int n, double bpm, doubl
             spawnSpark();
 
         // Stimmen
-        float padL = 0.0f, padR = 0.0f;
+        float padL = 0.0f, padR = 0.0f, power = 0.0f;
         for (auto& v : voices)
         {
             if (! v.active) continue;
@@ -502,6 +506,16 @@ void StarPadEngine::process (float* left, float* right, int n, double bpm, doubl
             }
             padL += sl * v.env;
             padR += sr2 * v.env;
+            power += v.env * v.env * (float) v.nOsc;   // Unison-Stimmen addieren sich wie unkorrelierte Signale
+        }
+
+        // Polyphonie-Ausgleich: ab mehr als einem Pad-Akkord gleich laut bleiben statt in die Sättigung zu laufen
+        {
+            const float target = power > polyRefPower ? std::sqrt (polyRefPower / power) : 1.0f;
+            const float coef = target < polyGain ? polyAttack : polyRelease;
+            polyGain = target + coef * (polyGain - target);
+            padL *= polyGain;
+            padR *= polyGain;
         }
 
         // 24-dB-Tiefpass
