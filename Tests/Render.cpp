@@ -13,6 +13,35 @@ int main (int argc, char** argv)
     const int numScenes = argc > 2 ? juce::String (argv[2]).getIntValue() : 8;
     juce::WavAudioFormat wav;
 
+    // Gate und eigene Auswahl: Pegel pro Sekunde (Gate 0-4 s zu, 4-10 s offen, danach zu; ab 6 s nur Geiger)
+    if (numScenes < 0)
+    {
+        PlutoEngine e;
+        e.requestScene (12345);
+        e.prepare (sr, block);
+        const int secs = 16, perSec = (int) sr;
+        std::vector<float> l ((size_t) perSec), r ((size_t) perSec);
+        double ppq = 0.0;
+        for (int s = 0; s < secs; ++s)
+        {
+            e.setGate (s >= 4 && s < 10);
+            if (s == 6) e.requestElements (1u << PlutoEngine::Geiger);
+            std::fill (l.begin(), l.end(), 0.0f);
+            std::fill (r.begin(), r.end(), 0.0f);
+            for (int pos = 0; pos < perSec; pos += block)
+            {
+                const int n = juce::jmin (block, perSec - pos);
+                e.process (l.data() + pos, r.data() + pos, n, 122.0, ppq, true);
+                ppq += n / (sr * 60.0 / 122.0);
+            }
+            double sum = 0.0;
+            for (int i = 0; i < perSec; ++i) sum += (double) l[(size_t) i] * l[(size_t) i];
+            std::printf ("t=%2ds gate=%d mask=%05x rms %6.1f dBFS\n", s, (s >= 4 && s < 10) ? 1 : 0,
+                         e.display.activeMask.load(), juce::Decibels::gainToDecibels ((float) std::sqrt (sum / perSec), -120.0f));
+        }
+        return 0;
+    }
+
     // Jedes Element einzeln (nur Pegel, keine Dateien)
     if (numScenes == 0)
     {

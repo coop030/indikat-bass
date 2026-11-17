@@ -35,6 +35,11 @@ public:
     void randomize();
     juce::uint32 getSeed() const { return seed.load(); }
 
+    // Einzelne Elemente an- und ausschalten (Klick auf LAYERS); gilt bis zum nächsten Würfeln
+    void toggleElement (int element);
+    juce::uint32 getElements() const { return elements.load(); }
+    bool isCustomSelection() const { return customSelection.load(); }
+
     juce::AudioProcessorValueTreeState apvts;   // Tonart und Tonleiter
     PlutoEngine engine;
     std::atomic<float> bpmShown { 122.0f };
@@ -42,9 +47,13 @@ public:
 private:
     void setSeed (juce::uint32);
 
-    std::atomic<juce::uint32> seed { 0 };
+    std::atomic<juce::uint32> seed { 0 }, elements { 0 };
+    std::atomic<bool> customSelection { false };
     std::atomic<float>* keyParam = nullptr;
     std::atomic<float>* scaleParam = nullptr;
+    std::atomic<float>* triggerParam = nullptr;
+    std::array<bool, 128> heldNotes {};
+    int numHeld = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlutoProcessor)
 };

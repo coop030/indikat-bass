@@ -26,11 +26,19 @@ public:
     static const char* noteName (int);
     void setScale (int root, int scale) { rootNote.store (root); scaleIndex.store (scale); }
 
+    // Gate: nur bei offenem Gate laufen Flächen und neue Ereignisse; Delay und Hall klingen aus
+    void setGate (bool open) { gateOpen.store (open); }
+
     void prepare (double sampleRate, int maxBlockSize);
     void reset();
 
     // Neue Szene anfordern (thread-sicher, wird am nächsten Block übernommen)
     void requestScene (juce::uint32 seed) { pendingSeed.store ((juce::int64) seed); }
+
+    // Eigene Auswahl: welche Elemente (Bit pro Element) in der aktuellen Szene laufen.
+    // Gilt bis zur nächsten neuen Szene; requestScene setzt sie zurück.
+    void requestElements (juce::uint32 mask) { pendingMask.store ((juce::int64) mask); }
+    static juce::uint32 sceneMask (juce::uint32 seed);
 
     // Addiert die Atmo auf left/right (Dry bleibt unangetastet)
     void process (float* left, float* right, int numSamples, double bpm, double ppqAtStart, bool hostPlaying);
@@ -44,6 +52,7 @@ public:
     struct Display
     {
         std::atomic<juce::uint32> seed { 0 }, activeMask { 0 };
+        std::atomic<bool> gate { false };
         std::array<std::atomic<float>, numElements> activity {};
 
         static constexpr int ringSize = 32;
@@ -102,9 +111,13 @@ private:
 
     double sr = 44100.0;
     juce::Random rng;
-    std::atomic<juce::int64> pendingSeed { -1 };
-    Scene scene;
+    std::atomic<juce::int64> pendingSeed { -1 }, pendingMask { -1 };
+    Scene baseScene, scene;          // gewürfelte Szene und die gerade laufende (mit eigener Auswahl)
+    juce::int64 appliedMask = -1;    // eigene Auswahl, -1 = keine
+    static juce::uint32 maskOf (const Scene&);
+    void applyMask (juce::uint32);
     std::atomic<int> rootNote { 9 }, scaleIndex { 4 };   // A, Moll-Pentatonik
+    std::atomic<bool> gateOpen { true };
     int rootNow = 9, scaleNow = 4;
     std::array<float, numBeds> bedLevel {};
     float bedSmoothing = 0.0f;

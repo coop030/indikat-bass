@@ -188,6 +188,8 @@ void PlutoEngine::reset()
     // Aktuelle Szene beibehalten bzw. die angeforderte übernehmen
     if (pendingSeed.load() < 0)
         pendingSeed.store ((juce::int64) display.seed.load());
+    if (pendingMask.load() < 0 && appliedMask >= 0)
+        pendingMask.store (appliedMask);
 }
 
 float PlutoEngine::pink (int ch)
@@ -509,13 +511,37 @@ float PlutoEngine::renderVoice (Voice& v)
     return out * v.gain;
 }
 
+juce::uint32 PlutoEngine::maskOf (const Scene& s)
+{
+    juce::uint32 mask = 0;
+    for (int i = 0; i < numBeds; ++i) if (s.bedGain[(size_t) i] > 0.0f) mask |= 1u << i;
+    for (int i = 0; i < numEventTypes; ++i) if (s.eventWeight[(size_t) i] > 0.0f) mask |= 1u << (numBeds + i);
+    return mask;
+}
+
+juce::uint32 PlutoEngine::sceneMask (juce::uint32 seed) { return maskOf (makeScene (seed)); }
+
+void PlutoEngine::applyMask (juce::uint32 mask)
+{
+    // Klang der Szene bleibt, nur die Auswahl ändert sich; neu zugeschaltete Elemente bekommen mittlere Werte
+    scene = baseScene;
+    for (int i = 0; i < numBeds; ++i)
+        scene.bedGain[(size_t) i] = (mask >> i) & 1u ? (baseScene.bedGain[(size_t) i] > 0.0f ? baseScene.bedGain[(size_t) i] : 0.8f) : 0.0f;
+    for (int i = 0; i < numEventTypes; ++i)
+        scene.eventWeight[(size_t) i] = (mask >> (numBeds + i)) & 1u
+                                            ? (baseScene.eventWeight[(size_t) i] > 0.0f ? baseScene.eventWeight[(size_t) i] : 0.7f) : 0.0f;
+    display.activeMask.store (mask);
+}
+
 void PlutoEngine::process (float* left, float* right, int numSamples, double bpm, double ppqAtStart, bool hostPlaying)
 {
     // Szenenwechsel übernehmen
     const auto pending = pendingSeed.exchange (-1);
     if (pending >= 0)
     {
-        scene = makeScene ((juce::uint32) pending);
+        baseScene = makeScene ((juce::uint32) pending);
+        scene = baseScene;
+        appliedMask = -1;
         juce::dsp::Reverb::Parameters rp;
         rp.roomSize = scene.roomSize;
         rp.damping = 0.55f;
@@ -524,13 +550,20 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
         rp.width = 1.0f;
         reverb.setParameters (rp);
 
-        juce::uint32 mask = 0;
-        for (int i = 0; i < numBeds; ++i) if (scene.bedGain[(size_t) i] > 0.0f) mask |= 1u << i;
-        for (int i = 0; i < numEventTypes; ++i) if (scene.eventWeight[(size_t) i] > 0.0f) mask |= 1u << (numBeds + i);
         display.seed.store ((juce::uint32) pending);
-        display.activeMask.store (mask);
+        display.activeMask.store (maskOf (scene));
     }
 
+    // Eigene Auswahl übernehmen
+    const auto mask = pendingMask.exchange (-1);
+    if (mask >= 0)
+    {
+        appliedMask = mask;
+        applyMask ((juce::uint32) mask);
+    }
+
+    const float gate = gateOpen.load() ? 1.0f : 0.0f;
+    display.gate.store (gate > 0.0f);
     rootNow = ((rootNote.load() % 12) + 12) % 12;
     scaleNow = juce::jlimit (0, numScales - 1, scaleIndex.load());
 
@@ -558,7 +591,7 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
         {
             const int s = offset + i;
             for (int b = 0; b < numBeds; ++b)
-                bedLevel[(size_t) b] += bedSmoothing * (scene.bedGain[(size_t) b] - bedLevel[(size_t) b]);
+                bedLevel[(size_t) b] += bedSmoothing * (scene.bedGain[(size_t) b] * gate - bedLevel[(size_t) b]);
 
             // --- Takt: 16tel-Raster vom Host oder intern
             bool newStep = false;
@@ -581,7 +614,7 @@ void PlutoEngine::process (float* left, float* right, int numSamples, double bpm
                 if (stepPhase >= 1.0) { stepPhase -= 1.0; newStep = true; }
             }
 
-            if (newStep)
+            if (newStep && gate > 0.0f)
             {
                 // Offbeats bevorzugt – Dub-Gefühl
                 const float bias = (stepInBar % 4 == 2) ? 2.0f : 1.0f;

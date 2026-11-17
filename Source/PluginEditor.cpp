@@ -484,6 +484,7 @@ IndikatPanel::IndikatPanel (PlutoProcessor& p)
     };
     addChoice (keyBox, keyAtt, "key");
     addChoice (scaleBox, scaleAtt, "scale");
+    addChoice (triggerBox, triggerAtt, "trigger");
 
     if (auto svg = juce::XmlDocument::parse (juce::String::fromUTF8 (BinaryData::indikatlogo_svg, BinaryData::indikatlogo_svgSize)))
     {
@@ -626,6 +627,11 @@ void IndikatPanel::paint (juce::Graphics& g)
     g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.3f));
     g.drawText ("BPM // GRID 1/16", right - 200, 68, 200, 16, juce::Justification::centredRight);
 
+    // Gate-Anzeige: leuchtet, solange Pluto spielt
+    const juce::Point<float> gateDot ((float) triggerBox.getX() - 10.0f, (float) triggerBox.getBounds().getCentreY());
+    if (gateOpen) glowDot (g, gateDot, 2.4f, Palette::accent);
+    else          { g.setColour (Palette::faint); g.drawEllipse (juce::Rectangle<float> (6.0f, 6.0f).withCentre (gateDot), 1.0f); }
+
     // Trennlinie unter dem Header
     juce::ColourGradient line (Palette::hairHi.withAlpha (0.0f), 28.0f, 0.0f,
                                Palette::hairHi.withAlpha (0.0f), (float) getWidth() - 28.0f, 0.0f, false);
@@ -661,7 +667,7 @@ void IndikatPanel::paint (juce::Graphics& g)
     g.drawText ("TAP PLUTO", 0, 128, getWidth(), 18, juce::Justification::centred);
     g.setFont (fonts->mono (12.0f).withExtraKerningFactor (0.3f));
     g.setColour (Palette::dim);
-    g.drawText ("SCENE " + juce::String::toHexString ((int) shownSeed).toUpperCase().paddedLeft ('0', 8),
+    g.drawText ("SCENE " + juce::String::toHexString ((int) shownSeed).toUpperCase().paddedLeft ('0', 8) + (customSelection ? " *" : ""),
                 keyBox.getRight(), keyBox.getY(), scaleBox.getX() - keyBox.getRight(), keyBox.getHeight(),
                 juce::Justification::centred);
 
@@ -682,14 +688,45 @@ void IndikatPanel::paint (juce::Graphics& g)
     g.setFont (fonts->wide (9.0f).withExtraKerningFactor (0.3f));
     g.setColour (Palette::text.withAlpha (0.85f));
     g.drawText ("LAYERS", layerBox.getX() + 36, layerBox.getY() + 10, 200, 18, juce::Justification::centredLeft);
+    g.setFont (fonts->mono (10.0f).withExtraKerningFactor (0.3f));
+    g.setColour (Palette::faint);
+    g.drawText ("TAP TO TOGGLE", layerBox.getRight() - 214, layerBox.getY() + 10, 200, 18, juce::Justification::centredRight);
 
-    auto grid = layerBox.reduced (12, 0).withTrimmedTop (36).withTrimmedBottom (10);
+    for (int e = 0; e < PlutoEngine::numElements; ++e)
+        drawChip (g, chipBounds (e), e);
+}
+
+juce::Rectangle<int> IndikatPanel::chipBounds (int e) const
+{
+    const auto grid = layerBox.reduced (12, 0).withTrimmedTop (36).withTrimmedBottom (10);
     constexpr int cols = 5;
     const int rows = (PlutoEngine::numElements + cols - 1) / cols;
     const int rowH = grid.getHeight() / rows, colW = grid.getWidth() / cols;
+    return { grid.getX() + (e % cols) * colW, grid.getY() + (e / cols) * rowH, colW, rowH };
+}
+
+int IndikatPanel::chipAt (juce::Point<int> p) const
+{
     for (int e = 0; e < PlutoEngine::numElements; ++e)
-        drawChip (g, { grid.getX() + (e % cols) * colW, grid.getY() + (e / cols) * rowH, colW, rowH },
-                  e);
+        if (chipBounds (e).reduced (3).contains (p))
+            return e;
+    return -1;
+}
+
+void IndikatPanel::mouseDown (const juce::MouseEvent& e)
+{
+    const int element = chipAt (e.getPosition());
+    if (element < 0)
+        return;
+    proc.toggleElement (element);
+    activeMask = proc.getElements();
+    customSelection = true;
+    repaint (layerBox.expanded (4));
+}
+
+void IndikatPanel::mouseMove (const juce::MouseEvent& e)
+{
+    setMouseCursor (chipAt (e.getPosition()) >= 0 ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
 }
 
 void IndikatPanel::resized()
@@ -699,6 +736,7 @@ void IndikatPanel::resized()
     layerBox = juce::Rectangle<int> (28, getHeight() - 28 - 150, getWidth() - 56, 150);
     keyBox.setBounds (34, layerBox.getY() - 40, 64, 24);
     scaleBox.setBounds (getWidth() - 34 - 120, layerBox.getY() - 40, 120, 24);
+    triggerBox.setBounds (getWidth() - 30 - 112, 86, 112, 22);
     background = {};
 }
 
@@ -707,7 +745,9 @@ void IndikatPanel::timerCallback()
     auto& d = proc.engine.display;
     for (int e = 0; e < PlutoEngine::numElements; ++e)
         activity[(size_t) e] = 0.6f * activity[(size_t) e] + 0.4f * d.activity[(size_t) e].load();
-    activeMask = d.activeMask.load();
+    activeMask = proc.getElements();
+    customSelection = proc.isCustomSelection();
+    gateOpen = d.gate.load();
     shownSeed = proc.getSeed();
 
     const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;

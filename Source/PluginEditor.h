@@ -99,6 +99,10 @@ private:
     void renderBackground();
     void drawSparks (juce::Graphics&, double now) const;
     void drawChip (juce::Graphics&, juce::Rectangle<int>, int element) const;
+    juce::Rectangle<int> chipBounds (int element) const;
+    int chipAt (juce::Point<int>) const;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
     void timerCallback() override;
 
     PlutoProcessor& proc;
@@ -106,8 +110,8 @@ private:
     juce::SharedResourcePointer<IndikatFonts> fonts;
 
     PlanetButton planet;
-    juce::ComboBox keyBox, scaleBox;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAtt, scaleAtt;
+    juce::ComboBox keyBox, scaleBox, triggerBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> keyAtt, scaleAtt, triggerAtt;
 
     juce::Image background;
     std::unique_ptr<juce::Drawable> logo;
@@ -119,6 +123,7 @@ private:
     juce::Random rng;
     std::array<float, PlutoEngine::numElements> activity {};
     juce::uint32 activeMask = 0, shownSeed = 0;
+    bool customSelection = false, gateOpen = true;
     double lastTick = 0.0, clickTime = -10.0;
     float spinBoost = 0.0f;
 

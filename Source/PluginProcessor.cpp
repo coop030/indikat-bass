@@ -12,6 +12,9 @@ namespace
         juce::AudioProcessorValueTreeState::ParameterLayout layout;
         layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "key", 1 }, "Key", keys, 9));
         layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "scale", 1 }, "Scale", scales, 4));
+        // MIDI GATE: spielt nur, solange eine Note gehalten wird; ALWAYS ON: läuft durchgehend
+        layout.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "trigger", 1 }, "Trigger",
+                                                                  juce::StringArray { "MIDI GATE", "ALWAYS ON" }, 0));
         return layout;
     }
 }
@@ -23,6 +26,12 @@ PlutoProcessor::PlutoProcessor()
 {
     keyParam = apvts.getRawParameterValue ("key");
     scaleParam = apvts.getRawParameterValue ("scale");
+    triggerParam = apvts.getRawParameterValue ("trigger");
+
+    // Standalone hat meist kein MIDI: dort durchgehend spielen
+    if (wrapperType == wrapperType_Standalone)
+        if (auto* trigger = apvts.getParameter ("trigger"))
+            trigger->setValueNotifyingHost (1.0f);
     randomize();
 }
 
@@ -34,7 +43,19 @@ void PlutoProcessor::randomize()
 void PlutoProcessor::setSeed (juce::uint32 s)
 {
     seed.store (s);
+    elements.store (PlutoEngine::sceneMask (s));
+    customSelection.store (false);
     engine.requestScene (s);
+}
+
+void PlutoProcessor::toggleElement (int element)
+{
+    if (! juce::isPositiveAndBelow (element, (int) PlutoEngine::numElements))
+        return;
+    const auto mask = elements.load() ^ (1u << element);
+    elements.store (mask);
+    customSelection.store (true);
+    engine.requestElements (mask);
 }
 
 bool PlutoProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -45,16 +66,40 @@ bool PlutoProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 
 void PlutoProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    heldNotes = {};
+    numHeld = 0;
     engine.prepare (sampleRate, samplesPerBlock);
 }
 
-void PlutoProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void PlutoProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
 
     const int numOut = getTotalNumOutputChannels();
     buffer.clear();
     engine.setScale ((int) keyParam->load(), (int) scaleParam->load());
+
+    // Gehaltene Noten zählen (Note-Off auch als Note-On mit Velocity 0, All Notes Off)
+    for (const auto meta : midi)
+    {
+        const auto msg = meta.getMessage();
+        if (msg.isNoteOn() && ! heldNotes[(size_t) msg.getNoteNumber()])
+        {
+            heldNotes[(size_t) msg.getNoteNumber()] = true;
+            ++numHeld;
+        }
+        else if (msg.isNoteOff() && heldNotes[(size_t) msg.getNoteNumber()])
+        {
+            heldNotes[(size_t) msg.getNoteNumber()] = false;
+            --numHeld;
+        }
+        else if (msg.isAllNotesOff() || msg.isAllSoundOff())
+        {
+            heldNotes = {};
+            numHeld = 0;
+        }
+    }
+    engine.setGate (triggerParam->load() > 0.5f || numHeld > 0);
 
     double bpm = 122.0, ppq = 0.0;
     bool playing = false;
@@ -87,6 +132,10 @@ void PlutoProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
     auto state = apvts.copyState();
     state.setProperty ("seed", juce::String::toHexString ((int) seed.load()), nullptr);
+    if (customSelection.load())
+        state.setProperty ("elements", juce::String::toHexString ((int) elements.load()), nullptr);
+    else
+        state.removeProperty ("elements", nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
@@ -99,6 +148,13 @@ void PlutoProcessor::setStateInformation (const void* data, int size)
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             if (xml->hasAttribute ("seed"))
                 setSeed ((juce::uint32) xml->getStringAttribute ("seed").getHexValue32());
+            if (xml->hasAttribute ("elements"))
+            {
+                const auto mask = (juce::uint32) xml->getStringAttribute ("elements").getHexValue32();
+                elements.store (mask);
+                customSelection.store (true);
+                engine.requestElements (mask);
+            }
         }
 }
 

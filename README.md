@@ -20,6 +20,19 @@ Beim Wechsel blenden die alten Flächen weich aus und die neuen ein. Unten unter
 
 Die Szene wird mit dem Projekt gespeichert (Seed unter dem Planeten) und beim Öffnen genau so wiederhergestellt.
 
+## Trigger
+
+Oben rechts: **MIDI GATE** (Standard) oder **ALWAYS ON**.
+
+- **MIDI GATE:** Pluto spielt nur, solange eine MIDI-Note gehalten wird. In der Piano Roll also einfach eine lange Note über den Abschnitt ziehen, in dem die Atmo laufen soll. Beim Loslassen klingen Delay und Hall natürlich aus.
+- **ALWAYS ON:** Pluto läuft durchgehend (Standard in der Standalone-Version).
+
+Der Punkt neben dem Schalter leuchtet, solange Pluto spielt.
+
+## Elemente selbst wählen
+
+Ein Klick auf ein Element unter **LAYERS** schaltet es in der aktuellen Szene an oder aus. Die Szenennummer bekommt dann ein `*`. Die Auswahl wird mit dem Projekt gespeichert. Ein Klick auf Pluto würfelt wieder alles neu.
+
 ## Tonart
 
 Unten links **KEY** (Grundton) und rechts **SCALE** (Minor, Major, Dorian, Phrygian, Moll-/Dur-Pentatonik, Harmonisch Moll, Blues). Alle tonalen Elemente (Blips, Pings, Drips, Morse, der Kurzwellen-Pfeifton) bleiben in dieser Tonleiter. Beides ist automatisierbar und wird mit dem Projekt gespeichert. Standard: A Moll-Pentatonik.
