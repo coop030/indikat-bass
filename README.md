@@ -31,7 +31,7 @@ Zwei VST3/AU-Plugins (JUCE 8) für Basslines im Minimal-Dub- und Dub-Techno-Stil
 |---|---|
 | **LOW END** | Low Cut gegen Rumpeln, alles unter „Mono“ wird mono (clubtauglich), Sub per Low-Shelf anheben |
 | **DRIVE** | Asymmetrische Sättigung mit Tone, parallel mischbar |
-| **FILTER** | Resonantes LP/BP/HP, von der Hüllkurve moduliert; ENV ist bipolar (violett = schließend). LFO: Sinus synchron zur DAW (1/4 bis 4 Takte), Tiefe bis ±2,5 Oktaven |
+| **FILTER** | Resonantes LP 12/BP/HP oder LP 24 (steil, rund), von der Hüllkurve moduliert; ENV ist bipolar (violett = schließend). LFO: Sinus synchron zur DAW (1/4 bis 4 Takte), Tiefe bis ±2,5 Oktaven |
 | **DUB DELAY** | Tempo-synchron, Ping Pong, gesättigtes und gedämpftes Feedback. Der Low Cut hält den Sub aus dem Echo |
 | **REVERB** | Dunkler, modulierter FDN-Hall: Size (Raum + Nachhallzeit 0,7–14 s), Tone, Mix. LOW CUT (Standard: an) hält den Sub aus dem Hall |
 | **OUT** | Level/Input, Dry/Wet, Output |
@@ -65,9 +65,15 @@ Bei einem Preset-Wechsel kollabiert das Loch kurz und zeigt den Preset-Namen.
 
 ## Presets
 
-**Synth (17):** Init Saw, Deep Sub Pluck, Dub Chord Stab, Minor Ninth Stab, Deep Space Chord, Rubber Bass, Warm Round,
+**Synth (27):** Init Saw, Deep Sub Pluck, Dub Chord Stab, Minor Ninth Stab, Deep Space Chord, Rubber Bass, Warm Round,
 Minimal Click Bass, Acid Glide, Detuned Wobble, Sub Only, Warehouse Bass, Echo Dub Bass, Hollow Pulse,
-Tape Deep, Fifth Pluck, Night Drive. Die Pegel sind angeglichen (Bässe etwa −16 dBFS RMS, Stabs nach Spitzenpegel).
+Tape Deep, Fifth Pluck, Night Drive.
+
+**Deep-Dub-Bank (10, späte-90er-London-Sound):** Snowfield Sub, Burma Rubber, London Dub Roll, Deep Juno Stab,
+Velvet Ninth, Smoky Echo Bass, Organic Wood Bass, Filtered Swirl Bass, Night Bus Minor, Sunday Sub Glide.
+Die meisten nutzen den neuen Filtertyp **Lowpass 24** (24 dB/Okt.) für runde, analoge Bässe.
+
+Die Pegel sind angeglichen (Bässe etwa −16 dBFS RMS, Stabs nach Spitzenpegel).
 
 **FX (5):** Init, Deep Chord Dub, Rolling Sub, Warehouse Room, Echo Chamber
 
