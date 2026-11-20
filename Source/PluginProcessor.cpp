@@ -121,6 +121,68 @@ namespace
                            { "lfoRate", 2 }, { "lfoDepth", 0.35f },
                            { "delayDiv", 3 }, { "feedback", 0.55f }, { "delayMix", 0.25f },
                            { "revSize", 0.55f }, { "revMix", 0.2f }, { "outGain", 2.0f } } },
+
+        // --- Londoner Deep-Dub-Bänke: runde Analog-Bässe (LP 24), Gummi-Plucks, dunkle Dub-Chords ---
+        { "Snowfield Sub", { { "osc1Wave", 1 }, { "osc2Wave", 3 }, { "osc2Oct", -1 }, { "osc2Level", 0.35f }, { "subLevel", 0.3f },
+                             { "ampDecay", 450 }, { "ampSustain", 0.55f }, { "ampRelease", 140 },
+                             { "filterType", 3 }, { "cutoff", 420 }, { "reso", 0.3f }, { "envAmt", 0.45f }, { "envRelease", 220 },
+                             { "glide", 25 }, { "legato", 1 }, { "drift", 0.2f }, { "monoFreq", 140 },
+                             { "drive", 5 }, { "driveTone", 1500 }, { "driveMix", 0.45f },
+                             { "delayDiv", 3 }, { "feedback", 0.35f }, { "delayLowCut", 500 }, { "delayMix", 0.12f },
+                             { "revSize", 0.4f }, { "revMix", 0.08f } } },
+        { "Burma Rubber", { { "osc1Wave", 3 }, { "osc2Wave", 2 }, { "osc2Fine", 6 }, { "osc2Level", 0.45f },
+                            { "ampAttack", 0.5f }, { "ampDecay", 260 }, { "ampSustain", 0.25f }, { "ampRelease", 90 },
+                            { "filterType", 3 }, { "cutoff", 260 }, { "reso", 0.55f }, { "envAmt", 0.75f },
+                            { "envAttack", 0.5f }, { "envRelease", 150 },
+                            { "glide", 45 }, { "legato", 1 }, { "velocity", 0.7f }, { "drift", 0.15f },
+                            { "drive", 9 }, { "driveTone", 2200 }, { "driveMix", 0.5f },
+                            { "delayDiv", 1 }, { "feedback", 0.3f }, { "delayLowCut", 700 }, { "delayMix", 0.1f } } },
+        { "London Dub Roll", { { "osc1Wave", 2 }, { "osc2Wave", 4 }, { "osc2Oct", -1 }, { "osc2Level", 0.4f },
+                               { "ampDecay", 180 }, { "ampSustain", 0.15f }, { "ampRelease", 70 },
+                               { "filterType", 3 }, { "cutoff", 330 }, { "reso", 0.4f }, { "envAmt", 0.6f }, { "envRelease", 120 },
+                               { "lfoRate", 2 }, { "lfoDepth", 0.15f },
+                               { "delayDiv", 3 }, { "feedback", 0.5f }, { "delayLowCut", 600 }, { "delayMix", 0.2f },
+                               { "pingPong", 1 }, { "revSize", 0.45f }, { "revMix", 0.12f } } },
+        { "Deep Juno Stab", { { "osc1Wave", 2 }, { "osc2Wave", 3 }, { "osc2Fine", -8 }, { "osc2Level", 0.5f },
+                              { "chordOn", 1 }, { "chordType", 0 },
+                              { "ampDecay", 350 }, { "ampSustain", 0.0f }, { "ampRelease", 400 },
+                              { "filterType", 3 }, { "cutoff", 520 }, { "reso", 0.35f }, { "envAmt", 0.5f }, { "envRelease", 240 },
+                              { "lfoRate", 3 }, { "lfoDepth", 0.2f }, { "drift", 0.35f },
+                              { "drive", 4 }, { "driveTone", 1200 }, { "driveMix", 0.3f },
+                              { "delayDiv", 3 }, { "feedback", 0.68f }, { "delayLowCut", 350 }, { "delayTone", 1600 },
+                              { "delayMix", 0.4f }, { "revSize", 0.85f }, { "revTone", 0.3f }, { "revMix", 0.35f } } },
+        { "Velvet Ninth", { { "osc1Wave", 1 }, { "osc2Wave", 2 }, { "osc2Oct", 1 }, { "osc2Level", 0.25f },
+                            { "chordOn", 1 }, { "chordType", 1 },
+                            { "ampAttack", 4 }, { "ampDecay", 600 }, { "ampSustain", 0.0f }, { "ampRelease", 600 },
+                            { "cutoff", 700 }, { "reso", 0.2f }, { "envAmt", 0.3f }, { "envRelease", 350 }, { "drift", 0.3f },
+                            { "delayDiv", 5 }, { "feedback", 0.55f }, { "delayMix", 0.3f },
+                            { "revSize", 0.9f }, { "revTone", 0.4f }, { "revMix", 0.45f } } },
+        { "Smoky Echo Bass", { { "osc1Wave", 2 }, { "subLevel", 0.35f },
+                               { "ampDecay", 300 }, { "ampSustain", 0.3f }, { "ampRelease", 120 },
+                               { "filterType", 3 }, { "cutoff", 380 }, { "reso", 0.45f }, { "envAmt", 0.55f }, { "envRelease", 200 },
+                               { "delayDiv", 3 }, { "feedback", 0.72f }, { "delayLowCut", 450 }, { "delayTone", 1400 },
+                               { "delayMix", 0.35f }, { "pingPong", 1 }, { "revSize", 0.5f }, { "revMix", 0.15f } } },
+        { "Organic Wood Bass", { { "osc1Wave", 0 }, { "osc2Wave", 3 }, { "osc2Oct", 1 }, { "osc2Level", 0.2f }, { "subLevel", 0.2f },
+                                 { "ampAttack", 0.5f }, { "ampDecay", 140 }, { "ampSustain", 0.0f }, { "ampRelease", 90 },
+                                 { "cutoff", 1100 }, { "reso", 0.2f }, { "envAmt", 0.35f }, { "envRelease", 60 },
+                                 { "drive", 7 }, { "driveTone", 2600 }, { "driveMix", 0.35f } } },
+        { "Filtered Swirl Bass", { { "osc1Wave", 2 }, { "osc2Wave", 2 }, { "osc2Fine", 10 }, { "osc2Level", 0.7f },
+                                   { "filterType", 3 }, { "cutoff", 300 }, { "reso", 0.6f }, { "envAmt", 0.35f }, { "envRelease", 300 },
+                                   { "lfoRate", 2 }, { "lfoDepth", 0.45f },
+                                   { "drive", 6 }, { "driveMix", 0.4f },
+                                   { "delayDiv", 4 }, { "feedback", 0.45f }, { "delayMix", 0.15f }, { "revMix", 0.12f } } },
+        { "Night Bus Minor", { { "osc1Wave", 4 }, { "osc2Wave", 1 }, { "osc2Oct", 1 }, { "osc2Level", 0.3f },
+                               { "chordOn", 1 }, { "chordType", 2 },
+                               { "ampDecay", 180 }, { "ampSustain", 0.0f }, { "ampRelease", 200 },
+                               { "cutoff", 600 }, { "reso", 0.5f }, { "envAmt", 0.55f }, { "envRelease", 140 },
+                               { "delayDiv", 3 }, { "feedback", 0.6f }, { "delayMix", 0.35f }, { "pingPong", 1 },
+                               { "revSize", 0.7f }, { "revMix", 0.3f } } },
+        { "Sunday Sub Glide", { { "osc1Wave", 0 }, { "osc2Wave", 1 }, { "osc2Oct", 1 }, { "osc2Level", 0.35f }, { "subLevel", 0.2f },
+                                { "ampSustain", 0.9f }, { "ampRelease", 120 },
+                                { "glide", 120 }, { "legato", 1 },
+                                { "filterType", 3 }, { "cutoff", 900 }, { "envAmt", 0.2f },
+                                { "lfoRate", 3 }, { "lfoDepth", 0.1f },
+                                { "drive", 4 }, { "driveMix", 0.4f } } },
     };
 
     const Preset* const presets = DubBassProcessor::isSynth ? synthPresets : fxPresets;
@@ -165,7 +227,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout DubBassProcessor::createLayo
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "driveMix", 1 }, "Drive Mix", NormalisableRange<float> (0.0f, 1.0f), 1.0f, pct));
 
     // Envelope Filter
-    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "filterType", 1 }, "Filter Type", StringArray { "Lowpass", "Bandpass", "Highpass" }, 0));
+    p.push_back (std::make_unique<AudioParameterChoice> (ParameterID { "filterType", 1 }, "Filter Type", StringArray { "Lowpass", "Bandpass", "Highpass", "Lowpass 24" }, 0));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "cutoff", 1 }, "Cutoff", freqRange (40.0f, 18000.0f, 800.0f), isSynth ? 500.0f : 18000.0f, hz));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "reso", 1 }, "Resonance", NormalisableRange<float> (0.0f, 1.0f), 0.2f, pct));
     p.push_back (std::make_unique<AudioParameterFloat> (ParameterID { "envAmt", 1 }, "Env Amount", NormalisableRange<float> (-1.0f, 1.0f), isSynth ? 0.5f : 0.0f, pct));
@@ -241,6 +303,9 @@ void DubBassProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     xoverLow.prepare (spec);    xoverLow.setType (juce::dsp::LinkwitzRileyFilterType::lowpass);
     xoverHigh.prepare (spec);   xoverHigh.setType (juce::dsp::LinkwitzRileyFilterType::highpass);
     envFilter.prepare (spec);
+    envFilter2.prepare (spec);
+    envFilter2.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
+    envFilter2.setResonance (0.54f); // zweite Stufe neutral -> 24 dB/Okt. mit Resonanz der ersten
     delaySendHP.prepare (spec); delaySendHP.setType (juce::dsp::StateVariableTPTFilterType::highpass);
     delayFbLP.prepare (spec);   delayFbLP.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
 
@@ -284,10 +349,12 @@ void DubBassProcessor::updateFilters()
     delaySendHP.setCutoffFrequency (pDelayLowCut->load());
     delayFbLP.setCutoffFrequency (pDelayTone->load());
 
+    // 0 LP 12, 1 BP, 2 HP, 3 LP 24 (zwei kaskadierte Stufen: runder, analoger Bass)
     const auto ft = (int) pFilterType->load();
-    envFilter.setType (ft == 0 ? juce::dsp::StateVariableTPTFilterType::lowpass
-                     : ft == 1 ? juce::dsp::StateVariableTPTFilterType::bandpass
-                               : juce::dsp::StateVariableTPTFilterType::highpass);
+    envFilter.setType (ft == 1 ? juce::dsp::StateVariableTPTFilterType::bandpass
+                     : ft == 2 ? juce::dsp::StateVariableTPTFilterType::highpass
+                               : juce::dsp::StateVariableTPTFilterType::lowpass);
+    lowpass24 = ft == 3;
     // Resonanz 0..1 -> Q 0.5..12
     envFilter.setResonance (0.5f + std::pow (pReso->load(), 2.0f) * 11.5f);
 
@@ -442,9 +509,15 @@ void DubBassProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mid
             const float envNorm = juce::jlimit (0.0f, 1.0f, envelope * 2.0f);
             const float fc = juce::jlimit (20.0f, maxCut, cutoff * std::exp2 (envAmt * 5.0f * envNorm + lfoDepth * 2.5f * lfoValue));
             envFilter.setCutoffFrequency (fc);
+            if (lowpass24)
+                envFilter2.setCutoffFrequency (fc);
         }
         for (int ch = 0; ch < 2; ++ch)
+        {
             x[ch] = envFilter.processSample (ch, x[ch]);
+            if (lowpass24)
+                x[ch] = envFilter2.processSample (ch, x[ch]);
+        }
 
         // 4) Dub Delay (nur Signal oberhalb Delay-Low-Cut geht ins Delay -> Bass bleibt sauber)
         const float dTime = delayTimeSmoothed.getNextValue();

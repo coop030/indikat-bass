@@ -73,6 +73,8 @@ private:
     juce::dsp::IIR::Filter<float> subShelf[2];
     juce::dsp::IIR::Filter<float> driveTone[2];
     juce::dsp::StateVariableTPTFilter<float> envFilter;
+    juce::dsp::StateVariableTPTFilter<float> envFilter2;
+    bool lowpass24 = false;
     juce::dsp::StateVariableTPTFilter<float> delaySendHP;
     juce::dsp::StateVariableTPTFilter<float> delayFbLP;
 
